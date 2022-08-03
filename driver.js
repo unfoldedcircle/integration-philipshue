@@ -5,7 +5,7 @@ const uc = require("uc-integration-api");
 uc.init("driver.json");
 
 // handle commands coming from the core
-uc.events.on(
+uc.on(
 	uc.eventTypes.entity_command,
 	async (id, entity_id, entity_type, cmd_id, params) => {
 		console.log(
@@ -99,12 +99,12 @@ uc.events.on(
 	}
 );
 
-uc.events.on(uc.eventTypes.connect, async () => {
+uc.on(uc.eventTypes.connect, async () => {
 	subscribeToEvents();
 	uc.setDeviceState(uc.deviceStates.connected);
 });
 
-uc.events.on(uc.eventTypes.disconnect, async () => {
+uc.on(uc.eventTypes.disconnect, async () => {
 	uc.setDeviceState(uc.deviceStates.disconnected);
 });
 
