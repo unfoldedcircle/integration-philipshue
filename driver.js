@@ -6,7 +6,7 @@ uc.init("driver.json");
 
 // handle commands coming from the core
 uc.on(
-	uc.eventTypes.entity_command,
+	uc.EVENTS.ENTITY_COMMAND,
 	async (id, entity_id, entity_type, cmd_id, params) => {
 		console.log(
 			`ENTITY COMMAND: ${id} ${entity_id} ${entity_type} ${cmd_id} ${JSON.stringify(
@@ -19,8 +19,8 @@ uc.on(
 		const entity = await uc.configuredEntities.getEntity(entity_id);
 
 		switch (cmd_id) {
-			case uc.Entities.Light.commands.toggle:
-				if (entity.attributes.state == uc.Entities.Light.states.on) {
+			case uc.Entities.Light.COMMANDS.TOGGLE:
+				if (entity.attributes.state == uc.Entities.Light.STATES.ON) {
 					// turn off
 					authenticatedApi.lights
 						.setLightState(hueId, {
@@ -33,7 +33,7 @@ uc.on(
 							uc.acknowledgeCommand(id, false);
 						});
 				} else if (
-					entity.attributes.state == uc.Entities.Light.states.off
+					entity.attributes.state == uc.Entities.Light.STATES.OFF
 				) {
 					// turn on
 					authenticatedApi.lights
@@ -49,7 +49,7 @@ uc.on(
 				}
 				break;
 
-			case uc.Entities.Light.commands.on:
+			case uc.Entities.Light.COMMANDS.ON:
 				let hueParams = { on: true };
 
 				if (params.brightness) {
@@ -83,7 +83,7 @@ uc.on(
 					});
 				break;
 
-			case uc.Entities.Light.commands.off:
+			case uc.Entities.Light.COMMANDS.OFF:
 				authenticatedApi.lights
 					.setLightState(hueId, {
 						on: false,
@@ -99,13 +99,13 @@ uc.on(
 	}
 );
 
-uc.on(uc.eventTypes.connect, async () => {
+uc.on(uc.EVENTS.CONNECT, async () => {
 	subscribeToEvents();
-	uc.setDeviceState(uc.deviceStates.connected);
+	uc.setDeviceState(uc.DEVICE_STATES.CONNECTED);
 });
 
-uc.on(uc.eventTypes.disconnect, async () => {
-	uc.setDeviceState(uc.deviceStates.disconnected);
+uc.on(uc.EVENTS.DISCONNECT, async () => {
+	uc.setDeviceState(uc.DEVICE_STATES.DISCONNECTED);
 });
 
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -179,7 +179,7 @@ async function connectToBridge() {
 		await addAvailableLights();
 	} catch (e) {
 		console.log("Error connected to the Hue Bridge");
-		uc.setDeviceState(uc.deviceStates.error);
+		uc.setDeviceState(uc.DEVICE_STATES.ERROR);
 	}
 }
 
@@ -190,58 +190,58 @@ async function addAvailableLights() {
 		// console.log(light);
 
 		let features = [
-			uc.Entities.Light.features.on_off,
-			uc.Entities.Light.features.toggle,
+			uc.Entities.Light.FEATURES.ON_OFF,
+			uc.Entities.Light.FEATURES.TOGGLE,
 		];
 
 		let values = {
-			[uc.Entities.Light.attributes.state]: light.data.state.on
-				? uc.Entities.Light.states.on
-				: uc.Entities.Light.states.off,
+			[uc.Entities.Light.ATTRIBUTES.STATE]: light.data.state.on
+				? uc.Entities.Light.STATES.ON
+				: uc.Entities.Light.STATES.OFF,
 		};
 
 		switch (light.data.type) {
 			case "Dimmable light":
-				features.push(uc.Entities.Light.features.dim);
-				values[uc.Entities.Light.attributes.brightness] =
+				features.push(uc.Entities.Light.FEATURES.DIM);
+				values[uc.Entities.Light.ATTRIBUTES.BRIGHTNESS] =
 					light.data.state.bri;
 				break;
 
 			case "Color light":
 				features.push(
-					uc.Entities.Light.features.dim,
-					uc.Entities.Light.features.color
+					uc.Entities.Light.FEATURES.DIM,
+					uc.Entities.Light.FEATURES.COLOR
 				);
-				values[uc.Entities.Light.attributes.brightness] =
+				values[uc.Entities.Light.ATTRIBUTES.BRIGHTNESS] =
 					light.data.state.bri;
-				values[uc.Entities.Light.attributes.hue] = light.data.state.hue;
-				values[uc.Entities.Light.attributes.saturation] =
+				values[uc.Entities.Light.ATTRIBUTES.HUE] = light.data.state.hue;
+				values[uc.Entities.Light.ATTRIBUTES.SATURATION] =
 					light.data.state.sat;
 				break;
 
 			case "Color temperature light":
 				features.push(
-					uc.Entities.Light.features.dim,
-					uc.Entities.Light.features.color_temperature
+					uc.Entities.Light.FEATURES.DIM,
+					uc.Entities.Light.FEATURES.COLOR_TEMPERATURE
 				);
-				values[uc.Entities.Light.attributes.brightness] =
+				values[uc.Entities.Light.ATTRIBUTES.BRIGHTNESS] =
 					light.data.state.bri;
-				values[uc.Entities.Light.attributes.color_temperature] =
+				values[uc.Entities.Light.ATTRIBUTES.COLOR_TEMPERATURE] =
 					light.data.state.ct;
 				break;
 
 			case "Extended color light":
 				features.push(
-					uc.Entities.Light.features.dim,
-					uc.Entities.Light.features.color,
-					uc.Entities.Light.features.color_temperature
+					uc.Entities.Light.FEATURES.DIM,
+					uc.Entities.Light.FEATURES.COLOR,
+					uc.Entities.Light.FEATURES.COLOR_TEMPERATURE
 				);
-				values[uc.Entities.Light.attributes.brightness] =
+				values[uc.Entities.Light.ATTRIBUTES.BRIGHTNESS] =
 					light.data.state.bri;
-				values[uc.Entities.Light.attributes.hue] = light.data.state.hue;
-				values[uc.Entities.Light.attributes.saturation] =
+				values[uc.Entities.Light.ATTRIBUTES.HUE] = light.data.state.hue;
+				values[uc.Entities.Light.ATTRIBUTES.SATURATION] =
 					light.data.state.sat;
-				values[uc.Entities.Light.attributes.color_temperature] =
+				values[uc.Entities.Light.ATTRIBUTES.COLOR_TEMPERATURE] =
 					light.data.state.ct;
 				break;
 		}
@@ -298,20 +298,20 @@ async function subscribeToEvents() {
 									// state
 									if (dataItem.on) {
 										keys.push(
-											uc.Entities.Light.attributes.state
+											uc.Entities.Light.ATTRIBUTES.STATE
 										);
 										values.push(
 											dataItem.on.on
-												? uc.Entities.Light.states.on
-												: uc.Entities.Light.states.off
+												? uc.Entities.Light.STATES.ON
+												: uc.Entities.Light.STATES.OFF
 										);
 									}
 
 									// brightness
 									if (dataItem.dimming) {
 										keys.push(
-											uc.Entities.Light.attributes
-												.brightness
+											uc.Entities.Light.ATTRIBUTES
+												.BRIGHTNESS
 										);
 										values.push(
 											parseInt(
@@ -329,8 +329,8 @@ async function subscribeToEvents() {
 												.mirek_valid == true
 										) {
 											keys.push(
-												uc.Entities.Light.attributes
-													.color_temperature
+												uc.Entities.Light.ATTRIBUTES
+													.COLOR_TEMPERATURE
 											);
 											values.push(
 												convertColorTempFromHue(
@@ -354,11 +354,11 @@ async function subscribeToEvents() {
 											);
 
 											keys.push(
-												uc.Entities.Light.attributes.hue
+												uc.Entities.Light.ATTRIBUTES.HUE
 											);
 											keys.push(
-												uc.Entities.Light.attributes
-													.saturation
+												uc.Entities.Light.ATTRIBUTES
+													.SATURATION
 											);
 											values.push(parseInt(res.h));
 											values.push(parseInt(res.s));
