@@ -1,7 +1,7 @@
 {
 	"driver_id": "uc_hue_driver",
-	"version": "0.0.1",
-	"min_core_api": "0.0.1",
+	"version": "0.0.2",
+	"min_core_api": "0.0.2",
 	"name": { "en": "Philips Hue" },
 	"icon": "custom:hue_logo.png",
 	"description": {
