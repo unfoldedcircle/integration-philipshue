@@ -31,7 +31,7 @@
 					"label": {
 						"value": {
 							"en": "The integration will discover your Philips Hue Bridge on your network.",
-							"de": "Diese Integration dient zur Philips Hue Bridge integration."
+							"de": "Diese Integration dient zur Philips Hue Bridge ansteuerung."
 						}
 					}
 				}
