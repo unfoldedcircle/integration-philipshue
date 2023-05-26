@@ -16,7 +16,7 @@ You need to manually register the driver and create an integration in the core:
 
 ---
 
-The driver uses discovery for speakers. These will be available for the core to setup.
+The driver uses discovery for Philips Hue. These will be available for the core to setup.
 
 To register the integration send via websockets:
 
