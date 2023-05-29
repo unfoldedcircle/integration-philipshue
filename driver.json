@@ -1,13 +1,12 @@
 {
 	"driver_id": "uc_hue_driver",
-	"version": "0.0.2",
+	"version": "0.0.3",
 	"min_core_api": "0.0.2",
 	"name": { "en": "Philips Hue" },
 	"icon": "custom:hue_logo.png",
 	"description": {
 		"en": "Control your Philips Hue lights with Remote Two."
 	},
-	"port": "8098",
 	"developer": {
 		"name": "Unfolded Circle ApS",
 		"email": "hello@unfoldedcircle.com",

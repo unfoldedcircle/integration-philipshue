@@ -559,7 +559,7 @@ function convertImageToBase64(file) {
 
 async function loadConfig() {
 	try {
-		const raw = fs.readFileSync("config.json");
+		const raw = fs.readFileSync(uc.configDirPath + "/config.json");
 
 		try {
 			const json = JSON.parse(raw);
@@ -582,7 +582,7 @@ async function loadConfig() {
 function saveConfig() {
 	try {
 		fs.writeFileSync(
-			"config.json",
+			uc.configDirPath + "config.json",
 			JSON.stringify({
 				hueBridgeAddress: hueBridgeAddress,
 				hueBridgeUser: hueBridgeUser,
@@ -597,7 +597,7 @@ function saveConfig() {
 
 function removeConfig() {
 	try {
-		fs.unlinkSync("config.json")
+		fs.unlinkSync(uc.configDirPath + "/config.json")
 		console.log("Config file removed.");
 	} catch(e) {
 		console.error(e)
