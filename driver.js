@@ -386,6 +386,11 @@ async function addAvailableLights() {
 
 async function subscribeToEvents() {
 	const ipAddress = await resolveHostToIp(hueBridgeAddress);
+
+	if (ipAddress == null) {
+		return;
+	}
+
 	signalController = new AbortController();
 
 	axios
