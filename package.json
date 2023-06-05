@@ -15,7 +15,7 @@
 		"fs": "^0.0.1-security",
 		"https": "^1.0.0",
 		"node-hue-api": "^5.0.0-beta.13",
-		"uc-integration-api": "file:../uc_integration-node-library/uc-integration-api-0.0.7.tgz",
+		"uc-integration-api": "git+https://github.com/unfoldedcircle/integration-node-library.git#658552bf6a9836766e3df315c1546043e3060656",
 		"util": "^0.12.5"
 	}
 }
