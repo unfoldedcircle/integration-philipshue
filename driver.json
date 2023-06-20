@@ -1,6 +1,6 @@
 {
 	"driver_id": "uc_hue_driver",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"min_core_api": "0.0.2",
 	"name": { "en": "Philips Hue" },
 	"icon": "custom:philips-hue.png",
@@ -33,5 +33,5 @@
 			}
 		]
 	},
-	"release_date": "2023-04-23"
+	"release_date": "2023-06-20"
 }
