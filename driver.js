@@ -134,8 +134,14 @@ uc.on(uc.EVENTS.ENTER_STANDBY, async () => {
 });
 
 uc.on(uc.EVENTS.EXIT_STANDBY, async () => {
-	ucConnected = true;
+	const res = await connectToBridge();
+		if (!res) {
+			uc.setDeviceState(uc.DEVICE_STATES.ERROR);
+			return;
+		}
+
 	subscribeToEvents();
+	ucConnected = true;
 });
 
 // DRIVER SETUP
@@ -157,25 +163,62 @@ uc.on(uc.EVENTS.SETUP_DRIVER, async (wsHandle, setupData) => {
 
 	// start polling bridge address
 	hueDiscoveryCheck = setInterval(async () => {
-		if (hueBridgeAddress != null) {
-			console.log('Hue birdge found:', hueBridgeAddress);
+		if (discoveredHueBridges.length !== 0) {
+			console.log('We have discovered Hue bridges:', discoveredHueBridges);
 
 			clearInterval(hueDiscoveryCheck);
 			clearTimeout(hueDiscoveryTimeout);
-			
-			console.log('Requesting user confirmation...');
-			const img = convertImageToBase64('./assets/setupimg.png');
-			await uc.requestDriverSetupUserConfirmation(wsHandle, 'User action needed', 'Please press the button on the Philips Hue Bridge and click next.', img);
+
+			let dropdownItems = [];
+
+			discoveredHueBridges.forEach((item) => {
+				dropdownItems.push({
+					'id': item.address,
+					'label': {
+						'en': item.name
+					}
+				});
+			});
+
+			console.log(dropdownItems);
+
+			await uc.requestDriverSetupUserInput(wsHandle, 'Please select your Philips Hue hub', [{
+				'field': {
+					'dropdown': {
+						'value': dropdownItems[0]['id'],
+						'items': dropdownItems
+					}
+				},
+				'id': 'choice',
+				'label': {'en': 'Discovered hubs'}
+			}]);
 		}
-	}, 2000);
+	}, 4000);
 
 	hueDiscoveryTimeout = setTimeout(async () => {
 		clearInterval(hueDiscoveryCheck);
 		console.log('Discovery timeout');
 
-		await uc.driverSetupError(wsHandle, 'No Philips Hue Bridges were discovered.');
+		await uc.driverSetupError(wsHandle);
 
-	}, 20000);
+	}, 10000);
+});
+
+uc.on(uc.EVENTS.SETUP_DRIVER_USER_DATA, async (wsHandle, data) => {
+	console.log('Received user input for driver setup: sending OK');
+	await uc.acknowledgeCommand(wsHandle);
+	await uc.driverSetupProgress(wsHandle);
+
+	if (data == null || !('choice' in data)) {
+		await uc.driverSetupError(wsHandle);
+	}
+
+	hueBridgeAddress = data.choice;
+
+	console.log('Requesting user confirmation...');
+	const img = convertImageToBase64('./assets/setupimg.png');
+	await uc.requestDriverSetupUserConfirmation(wsHandle, 'User action needed', 'Please press the button on the Philips Hue Bridge and click next.', img);
+
 });
 
 uc.on(uc.EVENTS.SETUP_DRIVER_USER_CONFIRMATION, async (wsHandle) => {
@@ -187,13 +230,7 @@ uc.on(uc.EVENTS.SETUP_DRIVER_USER_CONFIRMATION, async (wsHandle) => {
 	console.log('Sending setup progress that we are still busy...');
 
 	// pair with the bridge
-	const ipAddress = await resolveHostToIp(hueBridgeAddress);
-	if (ipAddress == null) {
-		await uc.driverSetupError(wsHandle, 'There was an error while connecting to the bridge');
-		return;
-	}
-
-	const res = await pairWithBridge(ipAddress);
+	const res = await pairWithBridge(hueBridgeAddress);
 
 	if (res) {
 		// connect to Hue bridge
@@ -203,10 +240,10 @@ uc.on(uc.EVENTS.SETUP_DRIVER_USER_CONFIRMATION, async (wsHandle) => {
 			console.log('Driver setup completed!');
 			await uc.driverSetupComplete(wsHandle);
 		} else {
-			await uc.driverSetupError(wsHandle, 'There was an error while connecting to the bridge');
+			await uc.driverSetupError(wsHandle);
 		}
 	} else {
-		await uc.driverSetupError(wsHandle, 'There was an error while pairing with the bridge. The button was not pressed.');
+		await uc.driverSetupError(wsHandle);
 	}
 });
 // END DRIVER SETUP
@@ -225,6 +262,7 @@ let hueBridgeUser = null;
 let hueBridgeKey = null;
 let hueDiscoveryCheck;
 let hueDiscoveryTimeout;
+let discoveredHueBridges = null;
 
 let signalController = null;
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
@@ -235,33 +273,25 @@ const { Bonjour } = require('bonjour-service');
 const browser = new Bonjour();
 const axios = require("axios");
 const https = require("https");
-const dns = require('dns');
-const lookup = util.promisify(dns.lookup);
-
-async function resolveHostToIp(host) {
-	let res = null;
-
-	try {
-		const resp = await lookup(host, { family: 4 });
-		res = resp.address;
-	} catch (error) {
-		console.error(error);
-	}
-
-	return res;	
-}
 
 async function discoverBridge() {
+	discoveredHueBridges = [];
+
 	browser.find({ type: 'hue' }, async (service) => {
-		hueBridgeAddress = service.host;
-		console.log('Found a Hue hub:', hueBridgeAddress);
+		// console.log('Found a Hue hub:', service);
+		discoveredHueBridges.push({
+			'address': service.host,
+			'name': service.name
+		});
 	})
+
+	
 }
 
-async function pairWithBridge(ipAddress) {
+async function pairWithBridge(address) {
 	let res = false;
 
-	const unauthenticatedApi = await hueApi.createLocal(ipAddress).connect();
+	const unauthenticatedApi = await hueApi.createLocal(address).connect();
 
 	let createdUser;
 	try {
@@ -288,13 +318,8 @@ async function pairWithBridge(ipAddress) {
 }
 
 async function connectToBridge() {
-	const ipAddress = await resolveHostToIp(hueBridgeAddress);
-	if (ipAddress == null) {
-		return false;
-	}
-
 	authenticatedApi = await hueApi
-		.createLocal(ipAddress)
+		.createLocal(hueBridgeAddress)
 		.connect(hueBridgeUser);
 
 	const bridgeConfig = await authenticatedApi.configuration.getConfiguration();
@@ -385,16 +410,10 @@ async function addAvailableLights() {
 }
 
 async function subscribeToEvents() {
-	const ipAddress = await resolveHostToIp(hueBridgeAddress);
-
-	if (ipAddress == null) {
-		return;
-	}
-
 	signalController = new AbortController();
 
 	axios
-		.get(`https://${ipAddress}/eventstream/clip/v2`, {
+		.get(`https://${hueBridgeAddress}/eventstream/clip/v2`, {
 			responseType: "stream",
 			signal: signalController.signal,
 			headers: {
