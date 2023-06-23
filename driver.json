@@ -1,6 +1,6 @@
 {
 	"driver_id": "uc_hue_driver",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"min_core_api": "0.0.2",
 	"name": { "en": "Philips Hue" },
 	"icon": "custom:philips-hue.png",
@@ -21,17 +21,17 @@
 			{
 				"id": "info",
 				"label": {
-					"en": "Setup process"
+					"en": "Discovering bridges"
 				},
 				"field": {
 					"label": {
 						"value": {
-							"en": "The integration will discover your Philips Hue Bridge on your network."
+							"en": "The integration will discover Philips Hue Bridges on your network. After selecting one for setup, you'll need to press the button on the bridge, when prompted. Tap `Next` to start."
 						}
 					}
 				}
 			}
 		]
 	},
-	"release_date": "2023-06-20"
+	"release_date": "2023-06-23"
 }
