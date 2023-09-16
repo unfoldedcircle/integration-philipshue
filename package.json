@@ -1,6 +1,6 @@
 {
 	"name": "uc-integration-philipshue",
-	"version": "0.2.3",
+	"version": "0.2.4",
 	"description": "Philips Hue integration for Unfolded Circle",
 	"main": "driver.js",
 	"scripts": {
@@ -12,6 +12,6 @@
 		"axios": "^0.27.2",
 		"bonjour-service": "^1.1.1",
 		"node-hue-api": "^5.0.0-beta.13",
-		"uc-integration-api": "git+https://github.com/unfoldedcircle/integration-node-library.git#e57cd028a52775abb29d9ed81512fff9b2600c59"
+		"uc-integration-api": "git+https://github.com/unfoldedcircle/integration-node-library.git#947135e743d4add1be2a153a3a7cf87938f2778d"
 	}
 }
