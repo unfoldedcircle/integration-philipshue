@@ -212,7 +212,7 @@ uc.on(uc.EVENTS.SETUP_DRIVER_USER_DATA, async (wsHandle, data) => {
 	hueBridgeIp = discoveredHueBridges[data.choice].ip;
 
 	console.log('Requesting user confirmation...');
-	const img = convertImageToBase64('./assets/setupimg.png');
+	const img = convertImageToBase64('/opt/uc/integrations/philipshue/assets/setupimg.png');
 	await uc.requestDriverSetupUserConfirmation(wsHandle, 'User action needed', 'Please press the button on the Philips Hue Bridge and click next.', img);
 
 });
@@ -496,8 +496,9 @@ async function startPolling() {
 						return;
 					}
 
+					const state = light.state;
+
 					if (light.state) {
-						const state = light.state;
 						const entityState = state?.on ? uc.Entities.Light.STATES.ON : uc.Entities.Light.STATES.OFF || uc.Entities.Light.STATES.UNAVAILABLE;
 						if (configredEntity.attributes.state != entityState) {
 							response.set([uc.Entities.Light.ATTRIBUTES.STATE], entityState);
@@ -538,6 +539,7 @@ async function startPolling() {
 					}
 				} catch (error) {
 					console.error("Error getting hue light:", entity.entity_id);
+					console.error("Poll error", String(error));
 					response.set([uc.Entities.Light.ATTRIBUTES.STATE], uc.Entities.Light.STATES.UNAVAILABLE);
 				}
 
