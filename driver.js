@@ -456,7 +456,7 @@ async function startPolling() {
 					const light = await authenticatedApi.lights.getLight(entity.entity_id);
 					const configredEntity = uc.configuredEntities.getEntity(entity.entity_id);
 
-					console.debug("Got hue ligth with id:", light.id, light.name);
+					console.debug("Got hue light with id:", light.id, light.name);
 
 					if (configredEntity == null) {
 						console.error("Cannot find configured entity with id", entity.entity_id);
