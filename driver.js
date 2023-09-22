@@ -468,7 +468,7 @@ async function startPolling() {
 					const state = light.state;
 
 					if (state.bri) {
-						if (configredEntity.attributes.brightness != state.bri) {
+						if (configredEntity.attributes.brightness != state.bri && configredEntity.attributes.state != uc.Entities.Light.STATES.OFF) {
 							response.set([uc.Entities.Light.ATTRIBUTES.BRIGHTNESS], configredEntity.attributes.state == uc.Entities.Light.STATES.ON ? state.bri : 0);
 						}
 					}
@@ -510,7 +510,9 @@ async function startPolling() {
 				} catch (error) {
 					console.error("Error getting hue light:", entity.entity_id);
 					console.error("Poll error", String(error));
-					response.set([uc.Entities.Light.ATTRIBUTES.STATE], uc.Entities.Light.STATES.UNAVAILABLE);
+					if (configredEntity.attributes.state != uc.Entities.Light.STATES.UNAVAILABLE) {
+						response.set([uc.Entities.Light.ATTRIBUTES.STATE], uc.Entities.Light.STATES.UNAVAILABLE);
+					}
 				}
 
 				if (response.size > 0) {
