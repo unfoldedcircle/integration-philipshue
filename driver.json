@@ -1,14 +1,13 @@
 {
 	"driver_id": "uc_hue_driver",
-	"version": "0.0.2",
+	"version": "0.2.14",
 	"min_core_api": "0.0.2",
 	"name": { "en": "Philips Hue" },
-	"icon": "custom:hue_logo.png",
+	"icon": "uc:integration",
 	"description": {
 		"en": "Control your Philips Hue lights with Remote Two.",
 		"de": "Steuere Philips Hue Lampen mit Remote Two."
 	},
-	"port": "8098",
 	"developer": {
 		"name": "Unfolded Circle ApS",
 		"email": "hello@unfoldedcircle.com",
@@ -24,19 +23,19 @@
 			{
 				"id": "info",
 				"label": {
-					"en": "Setup process",
+					"en": "Discovering bridges",
 					"de": "Setup Fortschritt"
 				},
 				"field": {
 					"label": {
 						"value": {
-							"en": "The integration will discover your Philips Hue Bridge on your network.",
-							"de": "Diese Integration dient zur Philips Hue Bridge ansteuerung."
+							"en": "The integration will discover Philips Hue Bridges on your network. After selecting one for setup, you'll need to press the button on the bridge, when prompted. Tap `Next` to start.",
+							"de": "Die Integration sucht Philips Hue Bridges in deinem Netzwerk. Nachdem du eine Bridge für die Einrichtung ausgewählt hast, musst du die Taste auf der Bridges drücken, wenn du dazu aufgefordert wirst. Tippe auf `Weiter`, um zu starten."
 						}
 					}
 				}
 			}
 		]
 	},
-	"release_date": "2023-04-23"
+	"release_date": "2023-10-16"
 }
