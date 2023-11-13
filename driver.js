@@ -12,12 +12,18 @@ uc.on(
 	uc.EVENTS.ENTITY_COMMAND,
 	async (wsHandle, entity_id, entity_type, cmd_id, params) => {
 		console.log(
-			`ENTITY COMMAND: ${wsHandle} ${entity_id} ${entity_type} ${cmd_id}`
+			`ENTITY COMMAND: ${entity_id} ${entity_type} ${cmd_id}`
 		);
 
 		const entity = await uc.configuredEntities.getEntity(entity_id);
 		if (entity == null) {
 			console.error("Cannot find entity", entity_id);
+			await uc.acknowledgeCommand(wsHandle, uc.STATUS_CODES.SERVICE_UNAVAILABLE);
+			return;
+		}
+
+		if (authenticatedApi == null) {
+			console.warn("Bridge instance not available");
 			await uc.acknowledgeCommand(wsHandle, uc.STATUS_CODES.SERVICE_UNAVAILABLE);
 			return;
 		}
@@ -56,7 +62,7 @@ uc.on(
 				authenticatedApi.lights
 					.setLightState(entity_id, hueParams)
 					.then(async (result) => {
-						console.log("Result:", result);
+						console.log(`${entity_id} ${entity_type} ${cmd_id} result: ${result}`);
 						await uc.acknowledgeCommand(wsHandle);
 					})
 					.catch(async (error) => {
@@ -71,7 +77,7 @@ uc.on(
 						on: false,
 					})
 					.then(async (result) => {
-						console.log("Result:", result);
+						console.log(`${entity_id} ${entity_type} ${cmd_id} result: ${result}`);
 						await uc.acknowledgeCommand(wsHandle);
 					})
 					.catch(async (error) => {
@@ -311,7 +317,7 @@ async function connect() {
 				console.error("Error connecting to the Hue bridge. Trying again.");
 				ucConnectionAttempts += 1;
 
-				if (ucConnectionAttempts == 10) {
+				if (ucConnectionAttempts === 10) {
 					console.debug("Discovering the bridge again.");
 					const discoveredRes = await discoverBridges();
 					if (hueBridgeAddress in discoveredRes) {
