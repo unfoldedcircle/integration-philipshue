@@ -33,8 +33,8 @@ uc.on(
 				let hueParams = { on: true };
 
 				if (params) {
-					if (params.brightness) {
-						if (params.brightness == 0) {
+					if (params.brightness !== undefined) {
+						if (params.brightness === 0) {
 							hueParams["on"] = false;
 						} else {
 							hueParams["bri"] = params.brightness - 1; // hue works with 0-254
@@ -42,7 +42,7 @@ uc.on(
 					}
 
 					// The hue value is a wrapping value between 0 and 65535
-					if (params.hue) {
+					if (params.hue !== undefined) {
 						const scale = ((params.hue - 0) / 360) * 65535;
 						hueParams["hue"] = scale;
 					}
@@ -52,7 +52,7 @@ uc.on(
 					}
 
 					// 153 - 500
-					if (params.color_temperature) {
+					if (params.color_temperature !== undefined) {
 						hueParams["ct"] = convertColorTempToHue(
 							params.color_temperature
 						);
