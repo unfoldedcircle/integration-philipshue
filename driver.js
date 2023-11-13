@@ -446,36 +446,35 @@ async function startPolling() {
 		}
 
 		const entities = uc.configuredEntities.getEntities();
-		// const lights = await authenticatedApi.lights.getAll();
 
 		for (const entity of entities) {
 			if (entity.entity_id) {
 				let response = new Map([]);
 
+				// Get full entity data, getEntities() only returns a subset without attributes!
+				const configuredEntity = uc.configuredEntities.getEntity(entity.entity_id);
+				if (configuredEntity == null) {
+					response.set([uc.Entities.Light.ATTRIBUTES.STATE], uc.Entities.Light.STATES.UNAVAILABLE);
+					uc.configuredEntities.updateEntityAttributes(entity.entity_id, response);
+					continue;
+				}
+
 				try {
 					const light = await authenticatedApi.lights.getLight(entity.entity_id);
-					const configredEntity = uc.configuredEntities.getEntity(entity.entity_id);
 
 					console.debug("Got hue light with id:", light.id, light.name);
-
-					if (configredEntity == null) {
-						console.error("Cannot find configured entity with id", entity.entity_id);
-						response.set([uc.Entities.Light.ATTRIBUTES.STATE], uc.Entities.Light.STATES.UNAVAILABLE);
-						uc.configuredEntities.updateEntityAttributes(entity.entity_id, response);
-						return;
-					}
 
 					const state = light.state;
 
 					if (state.bri) {
-						if (configredEntity.attributes.brightness != state.bri && configredEntity.attributes.state != uc.Entities.Light.STATES.OFF) {
-							response.set([uc.Entities.Light.ATTRIBUTES.BRIGHTNESS], configredEntity.attributes.state == uc.Entities.Light.STATES.ON ? state.bri : 0);
+						if (configuredEntity.attributes.brightness !== state.bri && configuredEntity.attributes.state !== uc.Entities.Light.STATES.OFF) {
+							response.set([uc.Entities.Light.ATTRIBUTES.BRIGHTNESS], configuredEntity.attributes.state === uc.Entities.Light.STATES.ON ? state.bri : 0);
 						}
 					}
 
 					if (light.state) {
 						const entityState = state.on ? uc.Entities.Light.STATES.ON : uc.Entities.Light.STATES.OFF;
-						if (configredEntity.attributes.state != entityState) {
+						if (configuredEntity.attributes.state !== entityState) {
 							response.set([uc.Entities.Light.ATTRIBUTES.STATE], entityState);
 							response.set([uc.Entities.Light.ATTRIBUTES.BRIGHTNESS], state.on ? state.bri : 0);
 						}
@@ -484,7 +483,7 @@ async function startPolling() {
 					if (state.ct) {
 						try {
 							const entityColorTemp = convertColorTempFromHue(state.ct);
-							if (configredEntity.attributes.color_temperature != entityColorTemp) {
+							if (configuredEntity.attributes.color_temperature !== entityColorTemp) {
 								response.set([uc.Entities.Light.ATTRIBUTES.COLOR_TEMPERATURE], entityColorTemp);
 							}
 						} catch (error) {
@@ -497,10 +496,10 @@ async function startPolling() {
 							const res = convertXYtoHSV(state.xy[0], state.xy[1]);
 							const entityHue = res.hue;
 							const entitySat = res.sat;
-							if (configredEntity.attributes.hue != entityHue) {
+							if (configuredEntity.attributes.hue !== entityHue) {
 								response.set([uc.Entities.Light.ATTRIBUTES.HUE], entityHue);
 							}
-							if (configredEntity.attributes.saturation != entitySat) {
+							if (configuredEntity.attributes.saturation !== entitySat) {
 								response.set([uc.Entities.Light.ATTRIBUTES.SATURATION], entitySat);
 							}
 						} catch (error) {
@@ -508,9 +507,8 @@ async function startPolling() {
 						}
 					}
 				} catch (error) {
-					console.error("Error getting hue light:", entity.entity_id);
-					console.error("Poll error", String(error));
-					if (configredEntity.attributes.state != uc.Entities.Light.STATES.UNAVAILABLE) {
+					console.error(`Error getting hue light ${entity.entity_id}: ${error}`);
+					if (configuredEntity.attributes.state !== uc.Entities.Light.STATES.UNAVAILABLE) {
 						response.set([uc.Entities.Light.ATTRIBUTES.STATE], uc.Entities.Light.STATES.UNAVAILABLE);
 					}
 				}
