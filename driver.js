@@ -174,6 +174,7 @@ uc.on(uc.EVENTS.SETUP_DRIVER_USER_DATA, async (wsHandle, data) => {
 
 	if (data == null || !('choice' in data)) {
 		await uc.driverSetupError(wsHandle);
+		return
 	}
 
 	hueBridgeAddress = discoveredHueBridges[data.choice].address;
