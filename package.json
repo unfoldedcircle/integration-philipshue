@@ -3,15 +3,28 @@
 	"version": "0.2.14",
 	"description": "Philips Hue integration for Unfolded Circle",
 	"main": "driver.js",
+	"type": "module",
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"format": "prettier --write .",
+		"code-check": "prettier --check . && eslint .",
+		"lint": "eslint --fix",
+		"test": "echo \"Error: no test specified\" && exit 1",
+		"build": "tsc",
+		"start": "npm run build && node dist/driver.js"
 	},
 	"author": "Unfolded Circle",
 	"license": "ISC",
 	"dependencies": {
+		"@unfoldedcircle/integration-api": "^0.2.2",
 		"axios": "^0.27.2",
 		"bonjour-service": "^1.1.1",
 		"node-hue-api": "^5.0.0-beta.13",
 		"uc-integration-api": "git+https://github.com/unfoldedcircle/integration-node-library.git#947135e743d4add1be2a153a3a7cf87938f2778d"
+	},
+	"devDependencies": {
+		"@types/debug": "^4.1.12",
+		"@types/node": "^22.10.2",
+		"@types/qs": "^6.9.17",
+		"typescript": "^5.7.2"
 	}
 }

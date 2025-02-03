@@ -1,0 +1,22 @@
+{
+  "root": true,
+  "env": {
+    "es6": true,
+    "node": true
+  },
+  "plugins": ["prettier"],
+  "extends": ["semistandard", "prettier"],
+  "rules": {
+    "prettier/prettier": [
+      "error",
+      {
+        "semi": true,
+        "trailingComma": "none",
+        "singleQuote": false,
+        "printWidth": 120,
+        "endOfLine": "auto"
+      }
+    ],
+    "no-unused-vars": ["warn", { "args": "none" }]
+  }
+}
