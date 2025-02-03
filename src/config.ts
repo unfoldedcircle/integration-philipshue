@@ -64,46 +64,6 @@ class Config {
     return this.config.lights[id];
   }
 
-  // public updateEntity(entity: PhilipsHueEntity) {
-  //   if (this.hasEntity(entity.userId)) {
-  //     return;
-  //   }
-  //   this.entities.push(entity);
-  //   this.saveToFile();
-  // }
-
-  // public clear() {
-  //   this.entities = [];
-  //   this.saveToFile();
-  // }
-
-  // public hasEntity(userId: string): boolean {
-  //   const entity = this.getEntity(userId);
-  //   return !!entity;
-  // }
-
-  // public getEntities(): SpotifyEntity[] {
-  //   return this.entities;
-  // }
-
-  // public getEntity(userId: string): SpotifyEntity | null {
-  //   return this.entities.find((entity) => entity.userId === userId) ?? null;
-  // }
-
-  // public forEachEntity(callback: (entity: SpotifyEntity) => void) {
-  //   this.entities.forEach(callback);
-  // }
-
-  // public removeEntity(userId: string): boolean {
-  //   const entity = this.getEntity(userId);
-  //   if (!entity) {
-  //     return false;
-  //   }
-  //   this.entities = this.entities.filter((entity) => entity.userId !== userId);
-  //   this.saveToFile();
-  //   return true;
-  // }
-
   private loadFromFile() {
     if (fs.existsSync(this.configPath)) {
       const data = fs.readFileSync(this.configPath, "utf-8");
