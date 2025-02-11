@@ -15,7 +15,7 @@ import HueApi from "./hue-api/api.js";
 import Config, { ConfigEvent, LightConfig } from "../config.js";
 import HueEventStream from "./hue-api/event-stream.js";
 import { HueEvent, LightResource } from "./hue-api/types.js";
-import { convertXYtoHSV, getHubUrl, getLightFeatures } from "../util.js";
+import { convertXYtoHSV, getHubUrl, getLightFeatures, mirekToColorTemp } from "../util.js";
 
 class PhilipsHue {
   private uc: IntegrationAPI;
@@ -166,8 +166,7 @@ class PhilipsHue {
     }
 
     if (light.color_temperature && light.color_temperature.mirek_valid) {
-      // todo: terri should implement this
-      const entityColorTemp = 20;
+      const entityColorTemp = mirekToColorTemp(light.color_temperature.mirek);
       lightState[LightAttributes.ColorTemperature] = entityColorTemp;
     }
 

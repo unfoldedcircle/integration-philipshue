@@ -70,3 +70,16 @@ export function convertXYtoHSV(x: number, y: number, lightness = 1) {
 export function getHubUrl(ip: string) {
   return "https://" + ip;
 }
+
+
+export function mirekToColorTemp(colorTemp: number) {
+	// color temperature range is (integer – minimum: 153 – maximum: 500)
+	// 347
+	colorTemp = colorTemp - 153;
+	return (colorTemp / 347) * 100;
+}
+
+export function colorTempToMirek(colorTemp: number) {
+	colorTemp = (colorTemp / 100) * 347;
+	return colorTemp + 153;
+}
