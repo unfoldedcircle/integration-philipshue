@@ -17,12 +17,14 @@ Content-Type: application/json
 # ]
 
 
+### get hub lights
+GET https://10.0.10.73/clip/v2/resource/device HTTP/1.1
+hue-application-key: 15S7kBmqpeYkXF1d9nnKjCV03yWgL2w3UMXBEH3C
 
 
 ### get hub lights
-GET https://10.0.10.73/clip/v2/resource/light HTTP/1.1
+GET https://10.0.10.73/clip/v2/resource/light/148db86f-b620-4935-8d9b-8913d126d720 HTTP/1.1
 hue-application-key: 15S7kBmqpeYkXF1d9nnKjCV03yWgL2w3UMXBEH3C
-
 
 ### register integration
 
@@ -48,3 +50,13 @@ Authorization: Basic web-configurator:1234
 }
 
 
+
+### turn light off
+PUT https://10.0.10.73/clip/v2/resource/light/148db86f-b620-4935-8d9b-8913d126d720 HTTP/1.1
+hue-application-key: 15S7kBmqpeYkXF1d9nnKjCV03yWgL2w3UMXBEH3C
+
+{
+  "on": {
+    "on": false
+  }
+}

@@ -1,7 +1,5 @@
 import {
   DriverSetupRequest,
-  IntegrationAPI,
-  Light,
   RequestUserConfirmation,
   RequestUserInput,
   SetupAction,
@@ -11,12 +9,12 @@ import {
   UserConfirmationResponse,
   UserDataResponse
 } from "@unfoldedcircle/integration-api";
-import { convertImageToBase64, delay, getLightFeatures } from "../util.js";
-import log from "../log.js";
 import { Bonjour } from "bonjour-service";
+import Config from "../config.js";
+import log from "../log.js";
+import { convertImageToBase64, delay, getHubUrl, getLightFeatures } from "../util.js";
 import HueApi from "./hue-api/api.js";
 import { LightResource } from "./hue-api/types.js";
-import Config from "../config.js";
 
 interface HueHub {
   id: string;
@@ -25,21 +23,18 @@ interface HueHub {
 }
 
 class PhilipsHueSetup {
-  private uc: IntegrationAPI;
   private bonjour: Bonjour;
   private hubs: HueHub[] = [];
   private hueApi: HueApi;
   private config: Config;
 
-  constructor(uc: IntegrationAPI, config: Config) {
-    this.uc = uc;
+  constructor(config: Config) {
     this.bonjour = new Bonjour();
     this.hueApi = new HueApi("");
     this.config = config;
   }
 
   async handleSetup(msg: SetupDriver): Promise<SetupAction> {
-    // this.updateStep("setup");
     if (msg instanceof DriverSetupRequest) {
       return await this.handleSetupRequest(msg);
     }
@@ -91,13 +86,12 @@ class PhilipsHueSetup {
     }
 
     try {
-      this.hueApi.setBaseUrl("https://" + selectedHub.ip);
-      const config = await this.hueApi.getConfig();
-      console.log("received hue api config", config);
+      this.hueApi.setBaseUrl(getHubUrl(selectedHub.ip));
+      const hubConfig = await this.hueApi.getHubConfig();
+      this.hueApi.setBridgeId(hubConfig.bridgeid);
       const authKey = await this.hueApi.generateAuthKey("unfoldedcircle#philips_hue");
-      console.log("received hue api auth key", authKey);
       this.hueApi.setAuthKey(authKey.username);
-      this.config.updateHubConfig({ ip: selectedHub.ip, username: authKey.username });
+      this.config.updateHubConfig({ ip: selectedHub.ip, username: authKey.username, bridgeId: hubConfig.bridgeid });
       const { data, errors } = await this.hueApi.lightResource.getLights();
 
       if (errors.length > 0) {
@@ -120,20 +114,7 @@ class PhilipsHueSetup {
 
   private async handleHubDiscovery(): Promise<SetupAction> {
     console.log("handleHubDiscovery");
-    // Start discovery timeout
 
-    // {
-    //   "name": "Hue Bridge",
-    //   "datastoreversion": "172",
-    //   "swversion": "1968096020",
-    //   "apiversion": "1.68.0",
-    //   "mac": "ec:b5:fa:1f:c7:5a",
-    //   "bridgeid": "ECB5FAFFFE1FC75A",
-    //   "factorynew": false,
-    //   "replacesbridgeid": null,
-    //   "modelid": "BSB002",
-    //   "starterkitid": ""
-    // }
     this.hubs.push({
       id: "ECB5FAFFFE1FC75A",
       ip: "10.0.10.73",
@@ -152,7 +133,7 @@ class PhilipsHueSetup {
       this.hubs.push(hub);
     });
 
-    await delay(1000);
+    await delay(4000);
 
     if (this.hubs.length > 0) {
       console.log("Hue bridge discovery: found hubs", this.hubs);

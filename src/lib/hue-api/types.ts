@@ -154,3 +154,32 @@ export interface AuthenticateSuccess {
   username: string;
   clientkey: string;
 }
+
+export type LightEffect =
+  | "prism"
+  | "opal"
+  | "glisten"
+  | "sparkle"
+  | "fire"
+  | "candle"
+  | "underwater"
+  | "cosmos"
+  | "sunbeam"
+  | "enchant"
+  | "no_effect";
+
+export interface LightResourceResponse {
+  errors: { description: string }[];
+  data: { rid: string }[];
+}
+
+export interface HueEvent {
+  id: string;
+  type: "update" | "add" | "delete" | "error";
+  data: {
+    id: string;
+    type: string;
+    [key: string]: any;
+  }[];
+  creationtime: string;
+}

@@ -1,28 +1,46 @@
-import { DeviceStates, Entity, Events, IntegrationAPI, Light, StatusCodes } from "@unfoldedcircle/integration-api";
+import {
+  DeviceStates,
+  Entity,
+  Events,
+  IntegrationAPI,
+  Light,
+  LightAttributes,
+  LightCommands,
+  LightStates,
+  StatusCodes
+} from "@unfoldedcircle/integration-api";
 import log from "../log.js";
 import PhilipsHueSetup from "./setup.js";
 import HueApi from "./hue-api/api.js";
 import Config, { ConfigEvent, LightConfig } from "../config.js";
+import HueEventStream from "./hue-api/event-stream.js";
+import { HueEvent, LightResource } from "./hue-api/types.js";
+import { convertXYtoHSV, getHubUrl, getLightFeatures } from "../util.js";
 
 class PhilipsHue {
   private uc: IntegrationAPI;
+  private config: Config;
   private setup: PhilipsHueSetup;
   private hueApi: HueApi;
-  private config: Config;
+  private eventStream: HueEventStream;
+
   constructor() {
     this.uc = new IntegrationAPI();
     this.config = new Config(this.uc.getConfigDirPath(), this.handleConfigEvent.bind(this));
-    this.setup = new PhilipsHueSetup(this.uc, this.config);
+    this.setup = new PhilipsHueSetup(this.config);
     this.hueApi = new HueApi("");
+    this.eventStream = new HueEventStream();
   }
 
   async init() {
     this.uc.init("driver.json", this.setup.handleSetup.bind(this.setup));
     const hubConfig = this.config.getHubConfig();
-    this.hueApi.setBaseUrl("https://" + hubConfig.ip);
+    this.hueApi.setBaseUrl(getHubUrl(hubConfig.ip));
     this.hueApi.setAuthKey(hubConfig.username);
+    this.hueApi.setBridgeId(hubConfig.bridgeId);
     this.readEntitiesFromConfig();
     this.setupDriverEvents();
+    this.setupEventStreamEvents();
     log.info("Philips Hue driver initialized");
   }
 
@@ -43,12 +61,21 @@ class PhilipsHue {
     this.uc.on(Events.ExitStandby, this.handleExitStandby.bind(this));
   }
 
-  // what can i do so when i do if event == light_Added, the data is typed?
+  private setupEventStreamEvents() {
+    const hubConfig = this.config.getHubConfig();
+    this.eventStream.on("update", this.handleEventStreamUpdate.bind(this));
+    this.eventStream.on("disconnected", () => {
+      log.warn("Event stream disconnected, trying to reconnect");
+      this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username, hubConfig.bridgeId);
+    });
+  }
+
+  // terri: check if you can simplify since
+  // light-added and light-updated are the same
   private handleConfigEvent(event: ConfigEvent) {
     if (event.type === "light-added") {
       const light = new Light(event.data.id, event.data.name, { features: event.data.features });
       this.addAvailableLight(light);
-      console.log("handleConfigEvent", event, event.data);
     }
   }
 
@@ -58,152 +85,98 @@ class PhilipsHue {
   }
 
   private async handleLightCmd(entity: Entity, command: string, params?: { [key: string]: string | number | boolean }) {
-    console.log("handleLightCmd", entity, command, params);
+    switch (command) {
+      case LightCommands.On:
+        this.hueApi.lightResource.setOn(entity.id, true);
+        break;
+      case LightCommands.Off:
+        await this.hueApi.lightResource.setOn(entity.id, false);
+        break;
+      default:
+        log.error(`handleLightCmd, Unsupported command: ${command}`);
+        return StatusCodes.BadRequest;
+    }
     return StatusCodes.Ok;
   }
 
   private async handleConnect() {
-    this.connect();
+    this.updateLights();
+  }
+
+  private handleEventStreamUpdate(event: HueEvent) {
+    for (const data of event.data) {
+      console.log("sync light from EventStream", data);
+      this.syncLightState(data.id, data);
+    }
   }
 
   private async handleSubscribeEntities() {
-    this.startPolling();
+    const hubConfig = this.config.getHubConfig();
+    this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username, hubConfig.bridgeId);
   }
 
   private async handleUnsubscribeEntities() {
-    this.stopPolling();
+    this.eventStream.disconnect();
   }
 
   private async handleDisconnect() {
-    this.stopPolling();
+    this.eventStream.disconnect();
     this.uc.setDeviceState(DeviceStates.Disconnected);
-    // ucConnected = false;
-    // ucConnectionAttempts = 0;
   }
 
   private async handleEnterStandby() {
-    //   ucConnected = false;
-    // ucConnectionAttempts = 0;
-    // stopPolling();
+    this.eventStream.disconnect();
   }
 
   private async handleExitStandby() {
-    //   await connect();
-    //   ucConnected = true;
+    const hubConfig = this.config.getHubConfig();
+    this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username, hubConfig.bridgeId);
   }
 
-  private async stopPolling() {
-    // clearInterval(pollWorker);
-    // pollWorker = null;
-    // console.debug("Polling stopped.");
+  private async updateLights() {
+    for (const entity of this.uc.getConfiguredEntities().getEntities()) {
+      const entityId = entity.entity_id as string;
+      const lightResource = await this.hueApi.lightResource.getLight(entityId);
+      if (lightResource.errors.length > 0) {
+        log.error(`Error fetching light ${entityId}: ${lightResource.errors[0]}`);
+        this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
+          [LightAttributes.State]: LightStates.Unavailable
+        });
+        return;
+      }
+      const light = lightResource.data[0];
+      const lightFeatures = getLightFeatures(light);
+      this.config.updateLight(entityId, { name: light.metadata.name, features: lightFeatures });
+      this.syncLightState(entityId, light);
+    }
   }
 
-  private async startPolling() {
-    // console.debug("Started polling.");
-    // if (pollWorker != null) {
-    //   console.debug("Polling has already started.");
-    //   return;
-    // }
-    // pollWorker = setInterval(async () => {
-    //   if (!ucConnected) {
-    //     return;
-    //   }
-    //   const entities = uc.configuredEntities.getEntities();
-    //   for (const entity of entities) {
-    //     if (entity.entity_id) {
-    //       let response = new Map([]);
-    //       // Get full entity data, getEntities() only returns a subset without attributes!
-    //       const configuredEntity = uc.configuredEntities.getEntity(entity.entity_id);
-    //       if (configuredEntity == null) {
-    //         response.set([uc.Entities.Light.ATTRIBUTES.STATE], uc.Entities.Light.STATES.UNAVAILABLE);
-    //         uc.configuredEntities.updateEntityAttributes(entity.entity_id, response);
-    //         continue;
-    //       }
-    //       try {
-    //         const light = await authenticatedApi.lights.getLight(entity.entity_id);
-    //         console.debug("Got hue light with id:", light.id, light.name);
-    //         const state = light.state;
-    //         if (state.bri) {
-    //           if (configuredEntity.attributes.brightness !== state.bri && configuredEntity.attributes.state !== uc.Entities.Light.STATES.OFF) {
-    //             response.set([uc.Entities.Light.ATTRIBUTES.BRIGHTNESS], configuredEntity.attributes.state === uc.Entities.Light.STATES.ON ? state.bri : 0);
-    //           }
-    //         }
-    //         if (light.state) {
-    //           const entityState = state.on ? uc.Entities.Light.STATES.ON : uc.Entities.Light.STATES.OFF;
-    //           if (configuredEntity.attributes.state !== entityState) {
-    //             response.set([uc.Entities.Light.ATTRIBUTES.STATE], entityState);
-    //             response.set([uc.Entities.Light.ATTRIBUTES.BRIGHTNESS], state.on ? state.bri : 0);
-    //           }
-    //         }
-    //         if (state.ct) {
-    //           try {
-    //             const entityColorTemp = convertColorTempFromHue(state.ct);
-    //             if (configuredEntity.attributes.color_temperature !== entityColorTemp) {
-    //               response.set([uc.Entities.Light.ATTRIBUTES.COLOR_TEMPERATURE], entityColorTemp);
-    //             }
-    //           } catch (error) {
-    //             console.error("Could not convert color temperature for", entity.entity_id);
-    //           }
-    //         }
-    //         if (state.xy) {
-    //           try {
-    //             const res = convertXYtoHSV(state.xy[0], state.xy[1]);
-    //             const entityHue = res.hue;
-    //             const entitySat = res.sat;
-    //             if (configuredEntity.attributes.hue !== entityHue) {
-    //               response.set([uc.Entities.Light.ATTRIBUTES.HUE], entityHue);
-    //             }
-    //             if (configuredEntity.attributes.saturation !== entitySat) {
-    //               response.set([uc.Entities.Light.ATTRIBUTES.SATURATION], entitySat);
-    //             }
-    //           } catch (error) {
-    //             console.error("Could not convert color for", entity.entity_id);
-    //           }
-    //         }
-    //       } catch (error) {
-    //         console.error(`Error getting hue light ${entity.entity_id}: ${error}`);
-    //         if (configuredEntity.attributes.state !== uc.Entities.Light.STATES.UNAVAILABLE) {
-    //           response.set([uc.Entities.Light.ATTRIBUTES.STATE], uc.Entities.Light.STATES.UNAVAILABLE);
-    //         }
-    //       }
-    //       if (response.size > 0) {
-    //         uc.configuredEntities.updateEntityAttributes(entity.entity_id, response);
-    //       }
-    //     }
-    //   }
-    // }, 2000);
-  }
+  private async syncLightState(entityId: string, light: Partial<LightResource>) {
+    const entity = this.uc.getConfiguredEntities().getEntity(entityId);
+    if (!entity) {
+      log.warn("entity is not configured, skipping sync", entityId);
+      return;
+    }
+    const lightState: Record<string, any> = {};
+    if (light.on) {
+      lightState[LightAttributes.State] = light.on.on ? LightStates.On : LightStates.Off;
+    }
+    if (light.dimming && light.on?.on) {
+      lightState[LightAttributes.Brightness] = light.dimming.brightness;
+    }
 
-  private async connect() {
-    //   if (hueBridgeKey != null) {
-    //     console.debug("Connecting to bridge...");
-    //     // connect to hue bridge
-    //     let res = false;
-    //     while (!res) {
-    //       res = await connectToBridge();
-    //       if (!res) {
-    //         uc.setDeviceState(uc.DEVICE_STATES.CONNECTING);
-    //         console.error("Error connecting to the Hue bridge. Trying again.");
-    //         ucConnectionAttempts += 1;
-    //         if (ucConnectionAttempts === 10) {
-    //           console.debug("Discovering the bridge again.");
-    //           const discoveredRes = await discoverBridges();
-    //           if (hueBridgeAddress in discoveredRes) {
-    //             hueBridgeIp = discoveredHueBridges[hueBridgeAddress].ip;
-    //             saveConfig();
-    //           }
-    //           await delay(1000);
-    //           await connectToBridge();
-    //         }
-    //         console.debug("Trying again in:", backOff());
-    //         await delay(backOff());
-    //       }
-    //     }
-    //     uc.setDeviceState(uc.DEVICE_STATES.CONNECTED);
-    //     ucConnected = true;
-    //     ucConnectionAttempts = 0;
-    //     startPolling();
-    //   }
+    if (light.color_temperature && light.color_temperature.mirek_valid) {
+      // todo: terri should implement this
+      const entityColorTemp = 20;
+      lightState[LightAttributes.ColorTemperature] = entityColorTemp;
+    }
+
+    if (light.color && light.color.xy) {
+      const { hue, sat } = convertXYtoHSV(light.color.xy.x, light.color.xy.y, light.dimming?.brightness);
+      lightState[LightAttributes.Hue] = hue;
+      lightState[LightAttributes.Saturation] = sat;
+    }
+    this.uc.getConfiguredEntities().updateEntityAttributes(entityId, lightState);
   }
 }
 

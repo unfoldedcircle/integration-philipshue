@@ -16,10 +16,12 @@
 	"license": "ISC",
 	"dependencies": {
 		"@unfoldedcircle/integration-api": "^0.2.2",
-		"axios": "^0.27.2",
+		"axios": "^1.7.0",
 		"bonjour-service": "^1.1.1",
+		"eventsource": "^3.0.5",
 		"node-hue-api": "^5.0.0-beta.13",
-		"uc-integration-api": "git+https://github.com/unfoldedcircle/integration-node-library.git#947135e743d4add1be2a153a3a7cf87938f2778d"
+		"uc-integration-api": "git+https://github.com/unfoldedcircle/integration-node-library.git#947135e743d4add1be2a153a3a7cf87938f2778d",
+		"undici": "^7.3.0"
 	},
 	"devDependencies": {
 		"@types/debug": "^4.1.12",
