@@ -16,6 +16,7 @@ import { convertImageToBase64, delay, getHubUrl, getLightFeatures } from "../uti
 import HueApi from "./hue-api/api.js";
 import { LightResource } from "./hue-api/types.js";
 import os from "os";
+
 interface HueHub {
   id: string;
   ip: string;
@@ -27,6 +28,7 @@ class PhilipsHueSetup {
   private hubs: HueHub[] = [];
   private hueApi: HueApi;
   private config: Config;
+  private selectedHub: HueHub | null = null;
 
   constructor(config: Config) {
     this.bonjour = new Bonjour();
@@ -52,25 +54,36 @@ class PhilipsHueSetup {
     if (msg.reconfigure) {
       // TODO redesign setup flow: do we really want to delete the configration at this point?
       //      This should be done as late as possible: the user should not loose the old cfg if setup fails!
-      // this.config.clear();
+      this.selectedHub = null;
+      this.hubs = [];
     }
-    const img = convertImageToBase64("./assets/setupimg.png");
-    if (!img) {
-      log.error("Failed to convert image to base64");
-      return new SetupError("Failed to process image during setup");
-    }
-    return new RequestUserConfirmation(
-      "Philips Hue setup",
-      "User action needed",
-      img,
-      "Please press the button on the Philips Hue Bridge and click next."
-    );
+    return await this.handleHubDiscovery();
   }
 
   private async handleUserConfirmationResponse(msg: UserConfirmationResponse): Promise<SetupAction> {
     console.log("handleUserConfirmationResponse", msg);
-    if (msg.confirm) {
-      return await this.handleHubDiscovery();
+    if (msg.confirm && this.selectedHub) {
+      try {
+        this.hueApi.setBaseUrl(getHubUrl(this.selectedHub.ip));
+        const hubConfig = await this.hueApi.getHubConfig();
+        this.hueApi.setBridgeId(hubConfig.bridgeid);
+        const authKey = await this.hueApi.generateAuthKey("unfoldedcircle#" + os.hostname());
+        this.hueApi.setAuthKey(authKey.username);
+        this.config.updateHubConfig({
+          ip: this.selectedHub.ip,
+          username: authKey.username,
+          bridgeId: hubConfig.bridgeid
+        });
+        const { data, errors } = await this.hueApi.lightResource.getLights();
+        if (errors.length > 0) {
+          return new SetupError("Failed to get lights");
+        }
+        this.addAvailableLights(data);
+        return new SetupComplete();
+      } catch (error) {
+        log.error("Failed to get hub config", error);
+        return new SetupError("Failed to get hub config");
+      }
     }
     return new SetupError("User did not confirm");
   }
@@ -84,25 +97,18 @@ class PhilipsHueSetup {
     if (!selectedHub) {
       return new SetupError("Hub not found");
     }
-
-    try {
-      this.hueApi.setBaseUrl(getHubUrl(selectedHub.ip));
-      const hubConfig = await this.hueApi.getHubConfig();
-      this.hueApi.setBridgeId(hubConfig.bridgeid);
-      const authKey = await this.hueApi.generateAuthKey("unfoldedcircle#" + os.hostname());
-      this.hueApi.setAuthKey(authKey.username);
-      this.config.updateHubConfig({ ip: selectedHub.ip, username: authKey.username, bridgeId: hubConfig.bridgeid });
-      const { data, errors } = await this.hueApi.lightResource.getLights();
-
-      if (errors.length > 0) {
-        return new SetupError("Failed to get lights");
-      }
-      this.addAvailableLights(data);
-      return new SetupComplete();
-    } catch (error) {
-      log.error("Failed to get hub config", error);
-      return new SetupError("Failed to get hub config");
+    this.selectedHub = selectedHub;
+    const img = convertImageToBase64("./assets/setupimg.png");
+    if (!img) {
+      log.error("Failed to convert image to base64");
+      return new SetupError("Failed to process image during setup");
     }
+    return new RequestUserConfirmation(
+      "Philips Hue setup",
+      "User action needed",
+      img,
+      "Please press the button on the Philips Hue Bridge and click next."
+    );
   }
 
   private addAvailableLights(lights: LightResource[]) {
@@ -113,9 +119,7 @@ class PhilipsHueSetup {
   }
 
   private async handleHubDiscovery(): Promise<SetupAction> {
-    console.log("handleHubDiscovery");
-    this.hubs = []
-
+    this.hubs = [];
     this.hubs.push({
       id: "ECB5FAFFFE1FC75A",
       ip: "10.0.10.73",
