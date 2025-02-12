@@ -21,12 +21,13 @@ class HueApi implements ResourceApi {
     this.axiosInstance = axios.create({
       baseURL: this.hubUrl,
       httpsAgent: new https.Agent({
-        ca: hueBridgeCA,
+        // ca: hueBridgeCA,
+        rejectUnauthorized: false,
         checkServerIdentity: (_, cert) => {
-          const certCN = cert.subject.CN;
-          if (certCN.toLowerCase() !== this.bridgeId.toLowerCase()) {
-            throw new Error("api.ts: Invalid bridge certificate");
-          }
+          // const certCN = cert.subject.CN;
+          // if (certCN.toLowerCase() !== this.bridgeId.toLowerCase()) {
+          //   throw new Error("api.ts: Invalid bridge certificate");
+          // }
           return undefined;
         }
       })

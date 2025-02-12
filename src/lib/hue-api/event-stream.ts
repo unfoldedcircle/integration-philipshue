@@ -1,8 +1,8 @@
 import { EventSource } from "eventsource";
 import EventEmitter from "node:events";
 import { Agent, fetch } from "undici";
+import log from "../../log.js";
 import { HueEvent } from "./types.js";
-import { hueBridgeCA } from "./cert.js";
 
 class HueEventStream extends EventEmitter {
   private es: EventSource | null = null;
@@ -19,13 +19,13 @@ class HueEventStream extends EventEmitter {
     }
     const dispatcher = new Agent({
       connect: {
-        ca: [hueBridgeCA],
-        rejectUnauthorized: true,
+        // ca: [hueBridgeCA],
+        rejectUnauthorized: false,
         checkServerIdentity: (_, cert) => {
-          const certCN = cert.subject.CN;
-          if (certCN.toLowerCase() !== bridgeId.toLowerCase()) {
-            throw new Error("event-stream.ts: Invalid bridge certificate");
-          }
+          // const certCN = cert.subject.CN;
+          // if (certCN.toLowerCase() !== bridgeId.toLowerCase()) {
+          //   throw new Error("event-stream.ts: Invalid bridge certificate");
+          // }
           return undefined;
         }
       }
@@ -53,12 +53,11 @@ class HueEventStream extends EventEmitter {
     };
 
     this.es.onopen = () => {
-      console.log("EVENTSTREAM CONNECTED");
+      log.debug("Philips Hue event stream connected");
       this.connected = true;
       this.emit("connected");
     };
     this.es.onmessage = (event) => {
-      console.log("EVENTSTREAM MESSAGE", event.data);
       try {
         const messages = JSON.parse(event.data) as HueEvent[];
         for (const message of messages) {

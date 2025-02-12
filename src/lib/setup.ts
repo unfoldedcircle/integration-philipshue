@@ -15,7 +15,7 @@ import log from "../log.js";
 import { convertImageToBase64, delay, getHubUrl, getLightFeatures } from "../util.js";
 import HueApi from "./hue-api/api.js";
 import { LightResource } from "./hue-api/types.js";
-
+import os from "os";
 interface HueHub {
   id: string;
   ip: string;
@@ -89,7 +89,7 @@ class PhilipsHueSetup {
       this.hueApi.setBaseUrl(getHubUrl(selectedHub.ip));
       const hubConfig = await this.hueApi.getHubConfig();
       this.hueApi.setBridgeId(hubConfig.bridgeid);
-      const authKey = await this.hueApi.generateAuthKey("unfoldedcircle#philips_hue");
+      const authKey = await this.hueApi.generateAuthKey("unfoldedcircle#" + os.hostname());
       this.hueApi.setAuthKey(authKey.username);
       this.config.updateHubConfig({ ip: selectedHub.ip, username: authKey.username, bridgeId: hubConfig.bridgeid });
       const { data, errors } = await this.hueApi.lightResource.getLights();
@@ -114,11 +114,12 @@ class PhilipsHueSetup {
 
   private async handleHubDiscovery(): Promise<SetupAction> {
     console.log("handleHubDiscovery");
+    this.hubs = []
 
     this.hubs.push({
       id: "ECB5FAFFFE1FC75A",
       ip: "10.0.10.73",
-      name: "Hue Bridge"
+      name: "Hue Bridge UC Office"
     });
     this.bonjour.find({ type: "hue" }, (service) => {
       if (!service.referer?.address) {
