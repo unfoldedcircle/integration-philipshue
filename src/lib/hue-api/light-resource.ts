@@ -1,5 +1,5 @@
 import { ResourceApi } from "./api.js";
-import { LightEffect, LightResourceResponse, LightResourceResult } from "./types.js";
+import { LightEffect, LightResourceParams, LightResourceResponse, LightResourceResult } from "./types.js";
 
 class LightResource {
   private readonly api: ResourceApi;
@@ -57,6 +57,10 @@ class LightResource {
         status: effect === "no_effect" ? "no_effect" : "active"
       }
     });
+  }
+
+  async updateLightState(id: string, params: Partial<LightResourceParams>) {
+    return this.api.sendRequest("PUT", `/clip/v2/resource/light/${id}`, params);
   }
 }
 

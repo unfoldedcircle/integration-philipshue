@@ -9,13 +9,22 @@ import {
   LightStates,
   StatusCodes
 } from "@unfoldedcircle/integration-api";
+import Config, { ConfigEvent } from "../config.js";
 import log from "../log.js";
-import PhilipsHueSetup from "./setup.js";
+import {
+  brightnessToPercent,
+  colorTempToMirek,
+  convertHSVtoXY,
+  convertXYtoHSV,
+  getHubUrl,
+  getLightFeatures,
+  mirekToColorTemp,
+  percentToBrightness
+} from "../util.js";
 import HueApi from "./hue-api/api.js";
-import Config, { ConfigEvent, LightConfig } from "../config.js";
 import HueEventStream from "./hue-api/event-stream.js";
-import { HueEvent, LightResource } from "./hue-api/types.js";
-import { convertXYtoHSV, getHubUrl, getLightFeatures, mirekToColorTemp } from "../util.js";
+import { HueEvent, LightResource, LightResourceParams } from "./hue-api/types.js";
+import PhilipsHueSetup from "./setup.js";
 
 class PhilipsHue {
   private uc: IntegrationAPI;
@@ -37,7 +46,6 @@ class PhilipsHue {
     const hubConfig = this.config.getHubConfig();
     this.hueApi.setBaseUrl(getHubUrl(hubConfig.ip));
     this.hueApi.setAuthKey(hubConfig.username);
-    this.hueApi.setBridgeId(hubConfig.bridgeId);
     this.readEntitiesFromConfig();
     this.setupDriverEvents();
     this.setupEventStreamEvents();
@@ -66,7 +74,9 @@ class PhilipsHue {
     this.eventStream.on("update", this.handleEventStreamUpdate.bind(this));
     this.eventStream.on("disconnected", () => {
       log.warn("Event stream disconnected, trying to reconnect");
-      this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username, hubConfig.bridgeId);
+      setTimeout(() => {
+        this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+      }, 2000);
     });
   }
 
@@ -86,8 +96,29 @@ class PhilipsHue {
 
   private async handleLightCmd(entity: Entity, command: string, params?: { [key: string]: string | number | boolean }) {
     switch (command) {
+      case LightCommands.Toggle: {
+        const currentState = entity.attributes?.[LightAttributes.State] as LightStates;
+        this.hueApi.lightResource.setOn(entity.id, currentState === LightStates.On ? false : true);
+        break;
+      }
       case LightCommands.On:
-        this.hueApi.lightResource.setOn(entity.id, true);
+        const req: Partial<LightResourceParams> = {};
+        // ("brightness" (0-255), "color_temperature" (0-100), "hue", "saturation".)
+        if (params?.brightness !== undefined) {
+          if (params.brightness === 0) {
+            req.on = { on: false };
+          } else {
+            req.dimming = { brightness: brightnessToPercent(Number(params.brightness)) };
+            req.on = { on: true };
+          }
+        }
+        if (params?.color_temperature !== undefined) {
+          req.color_temperature = { mirek: colorTempToMirek(Number(params.color_temperature)) };
+        }
+        if (params?.hue !== undefined && params?.saturation !== undefined) {
+          req.color = { xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), 1) };
+        }
+        await this.hueApi.lightResource.updateLightState(entity.id, req);
         break;
       case LightCommands.Off:
         await this.hueApi.lightResource.setOn(entity.id, false);
@@ -105,14 +136,16 @@ class PhilipsHue {
 
   private handleEventStreamUpdate(event: HueEvent) {
     for (const data of event.data) {
-      console.log("sync light from EventStream", data);
-      this.syncLightState(data.id, data);
+      if (["light", "grouped_light"].includes(data.type)) {
+        log.debug("event stream light update", data)
+        this.syncLightState(data.id, data);
+      }
     }
   }
 
   private async handleSubscribeEntities() {
     const hubConfig = this.config.getHubConfig();
-    this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username, hubConfig.bridgeId);
+    this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
   }
 
   private async handleUnsubscribeEntities() {
@@ -130,7 +163,7 @@ class PhilipsHue {
 
   private async handleExitStandby() {
     const hubConfig = this.config.getHubConfig();
-    this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username, hubConfig.bridgeId);
+    this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
   }
 
   private async updateLights() {
@@ -161,8 +194,8 @@ class PhilipsHue {
     if (light.on) {
       lightState[LightAttributes.State] = light.on.on ? LightStates.On : LightStates.Off;
     }
-    if (light.dimming && light.on?.on) {
-      lightState[LightAttributes.Brightness] = light.dimming.brightness;
+    if (light.dimming) {
+      lightState[LightAttributes.Brightness] = percentToBrightness(light.dimming.brightness);
     }
 
     if (light.color_temperature && light.color_temperature.mirek_valid) {

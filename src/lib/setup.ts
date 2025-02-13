@@ -50,7 +50,6 @@ class PhilipsHueSetup {
   }
 
   private async handleSetupRequest(msg: DriverSetupRequest): Promise<SetupAction> {
-    console.log("handleSetupRequest", msg);
     if (msg.reconfigure) {
       // TODO redesign setup flow: do we really want to delete the configration at this point?
       //      This should be done as late as possible: the user should not loose the old cfg if setup fails!
@@ -61,18 +60,14 @@ class PhilipsHueSetup {
   }
 
   private async handleUserConfirmationResponse(msg: UserConfirmationResponse): Promise<SetupAction> {
-    console.log("handleUserConfirmationResponse", msg);
     if (msg.confirm && this.selectedHub) {
       try {
         this.hueApi.setBaseUrl(getHubUrl(this.selectedHub.ip));
-        const hubConfig = await this.hueApi.getHubConfig();
-        this.hueApi.setBridgeId(hubConfig.bridgeid);
         const authKey = await this.hueApi.generateAuthKey("unfoldedcircle#" + os.hostname());
         this.hueApi.setAuthKey(authKey.username);
         this.config.updateHubConfig({
           ip: this.selectedHub.ip,
-          username: authKey.username,
-          bridgeId: hubConfig.bridgeid
+          username: authKey.username
         });
         const { data, errors } = await this.hueApi.lightResource.getLights();
         if (errors.length > 0) {
@@ -89,7 +84,6 @@ class PhilipsHueSetup {
   }
 
   private async handleUserDataResponse(msg: UserDataResponse): Promise<SetupAction> {
-    console.log("handleUserDataResponse", msg);
     if (!msg.inputValues.hubId) {
       return new SetupError("No hub selected");
     }
@@ -141,7 +135,7 @@ class PhilipsHueSetup {
     await delay(4000);
 
     if (this.hubs.length > 0) {
-      console.log("Hue bridge discovery: found hubs", this.hubs);
+      log.info("Hue bridge discovery: found hubs", this.hubs);
       const hubItems = this.hubs.map((hub) => ({
         id: hub.id,
         label: { en: hub.name },

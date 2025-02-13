@@ -16,7 +16,7 @@ export interface LightConfig {
   features: LightFeatures[];
 }
 interface PhilipsHueConfig {
-  hub: { ip: string; username: string; bridgeId: string };
+  hub: { ip: string; username: string };
   lights: { [key: string]: LightConfig };
 }
 
@@ -25,7 +25,7 @@ export type ConfigEvent =
   | { type: "light-updated"; data: LightConfig & { id: string } };
 
 class Config {
-  private config: PhilipsHueConfig = { hub: { ip: "", username: "", bridgeId: "" }, lights: {} };
+  private config: PhilipsHueConfig = { hub: { ip: "", username: "" }, lights: {} };
   private configPath: string;
   private cb?: (event: ConfigEvent) => void;
 
@@ -43,7 +43,6 @@ class Config {
     this.config.hub = { ...this.config.hub, ...hub };
     this.saveToFile();
   }
-  
 
   public addLight(id: string, light: LightConfig) {
     this.config.lights[id] = light;

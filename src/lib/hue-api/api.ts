@@ -1,7 +1,6 @@
 import axios, { AxiosInstance } from "axios";
 import https from "node:https";
 import log from "../../log.js";
-import { hueBridgeCA } from "./cert.js";
 import LightResource from "./light-resource.js";
 import { AuthenticateResult, AuthenticateSuccess, HubConfig } from "./types.js";
 
@@ -13,7 +12,6 @@ class HueApi implements ResourceApi {
   private hubUrl: string;
   public readonly lightResource: LightResource;
   private axiosInstance: AxiosInstance;
-  private bridgeId: string = "";
 
   constructor(hubUrl: string) {
     this.hubUrl = hubUrl;
@@ -21,13 +19,8 @@ class HueApi implements ResourceApi {
     this.axiosInstance = axios.create({
       baseURL: this.hubUrl,
       httpsAgent: new https.Agent({
-        // ca: hueBridgeCA,
         rejectUnauthorized: false,
-        checkServerIdentity: (_, cert) => {
-          // const certCN = cert.subject.CN;
-          // if (certCN.toLowerCase() !== this.bridgeId.toLowerCase()) {
-          //   throw new Error("api.ts: Invalid bridge certificate");
-          // }
+        checkServerIdentity: () => {
           return undefined;
         }
       })
@@ -41,10 +34,6 @@ class HueApi implements ResourceApi {
 
   setAuthKey(authKey: string) {
     this.axiosInstance.defaults.headers.common["hue-application-key"] = authKey;
-  }
-
-  setBridgeId(bridgeId: string) {
-    this.bridgeId = bridgeId;
   }
 
   async getHubConfig() {
@@ -66,7 +55,7 @@ class HueApi implements ResourceApi {
   }
 
   async sendRequest(method: "GET" | "POST" | "PUT", endpoint: string, body?: any): Promise<any> {
-    log.debug("philips hue api request", { method, endpoint });
+    log.msgTrace("philips hue api request", { method, endpoint });
     if (!this.axiosInstance.defaults.headers.common["hue-application-key"]) {
       throw new Error("auth key is required in protected resource", { cause: "auth_key_required" });
     }
@@ -80,17 +69,11 @@ class HueApi implements ResourceApi {
     } catch (error: any) {
       // axios error handing, taken from docs
       if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.log(error.response.data);
-        console.log(error.response.status);
-        console.log(error.response.headers);
+        log.error("philips hue api response error", error.response.data);
       } else if (error.request) {
-        // The request was made but no response was received
-        console.log(error.request);
+        log.error("philips hue api request error", error.request);
       } else {
-        // Something happened in setting up the request that triggered an Error
-        console.log("Error", error.message);
+        log.error("philips hue api unknown error", error.message);
       }
     }
   }

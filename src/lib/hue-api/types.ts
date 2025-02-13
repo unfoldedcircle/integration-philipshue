@@ -132,6 +132,22 @@ export interface LightResource {
   type: string;
 }
 
+export interface LightResourceParams {
+  on: { on: boolean };
+  dimming: {
+    brightness: number;
+  };
+  color: {
+    xy: {
+      x: number;
+      y: number;
+    };
+  };
+  color_temperature: {
+    mirek: number;
+  };
+}
+
 export interface HubConfig {
   name: string;
   datastoreversion: string;

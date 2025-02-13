@@ -13,19 +13,14 @@ class HueEventStream extends EventEmitter {
     super();
   }
 
-  connect(hubUrl: string, authKey: string, bridgeId: string) {
+  connect(hubUrl: string, authKey: string) {
     if (this.connected) {
       return;
     }
     const dispatcher = new Agent({
       connect: {
-        // ca: [hueBridgeCA],
         rejectUnauthorized: false,
-        checkServerIdentity: (_, cert) => {
-          // const certCN = cert.subject.CN;
-          // if (certCN.toLowerCase() !== bridgeId.toLowerCase()) {
-          //   throw new Error("event-stream.ts: Invalid bridge certificate");
-          // }
+        checkServerIdentity: () => {
           return undefined;
         }
       }
@@ -69,7 +64,7 @@ class HueEventStream extends EventEmitter {
     };
 
     this.es.onerror = (err) => {
-      console.log("EVENTSTREAM ERROR", err);
+      log.debug("Philips Hue event stream error", err);
       this.connected = false;
       this.emit("disconnected");
     };

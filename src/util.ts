@@ -67,19 +67,66 @@ export function convertXYtoHSV(x: number, y: number, lightness = 1) {
   return res;
 }
 
+export function convertHSVtoXY(hue: number, saturation: number, value: number) {
+  const h = hue / 60;
+  const s = saturation / 100;
+  const v = value / 100;
+
+  const c = v * s;
+  const x = c * (1 - Math.abs((h % 2) - 1));
+  const m = v - c;
+
+  let r, g, b;
+  if (h >= 0 && h < 1) {
+    [r, g, b] = [c, x, 0];
+  } else if (h < 2) {
+    [r, g, b] = [x, c, 0];
+  } else if (h < 3) {
+    [r, g, b] = [0, c, x];
+  } else if (h < 4) {
+    [r, g, b] = [0, x, c];
+  } else if (h < 5) {
+    [r, g, b] = [x, 0, c];
+  } else {
+    [r, g, b] = [c, 0, x];
+  }
+
+  [r, g, b] = [r + m, g + m, b + m];
+  const X = 0.412453 * r + 0.35758 * g + 0.180423 * b;
+  const Y = 0.212671 * r + 0.71516 * g + 0.072169 * b;
+  const Z = 0.019334 * r + 0.119193 * g + 0.950227 * b;
+  const sum = X + Y + Z;
+  return {
+    x: sum === 0 ? 0.3 : X / sum,
+    y: sum === 0 ? 0.3 : Y / sum
+  };
+}
+
 export function getHubUrl(ip: string) {
   return "https://" + ip;
 }
 
-
 export function mirekToColorTemp(colorTemp: number) {
-	// color temperature range is (integer – minimum: 153 – maximum: 500)
-	// 347
-	colorTemp = colorTemp - 153;
-	return (colorTemp / 347) * 100;
+  // color temperature range is (integer – minimum: 153 – maximum: 500)
+  // 347
+  colorTemp = colorTemp - 153;
+  return (colorTemp / 347) * 100;
 }
 
 export function colorTempToMirek(colorTemp: number) {
-	colorTemp = (colorTemp / 100) * 347;
-	return colorTemp + 153;
+  colorTemp = (colorTemp / 100) * 347;
+  return Math.round(colorTemp + 153);
+}
+
+/**
+ * Convert a brightness value to a percentage
+ * @param brightness - 0 - 255
+ * @returns The brightness value as a percentage (1-100)
+ */
+export function brightnessToPercent(brightness: number) {
+  return Math.max(1, Math.round((brightness / 255) * 100));
+}
+
+export function percentToBrightness(percent: number) {
+  return Math.max(1, Math.round((percent / 100) * 255));
 }
