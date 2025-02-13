@@ -18,7 +18,7 @@ Content-Type: application/json
 
 
 ### get hub lights
-GET https://10.0.10.73/clip/v2/resource/device HTTP/1.1
+GET https://10.0.10.73/clip/v2/resource/light HTTP/1.1
 hue-application-key: 15S7kBmqpeYkXF1d9nnKjCV03yWgL2w3UMXBEH3C
 
 
@@ -57,6 +57,6 @@ hue-application-key: 15S7kBmqpeYkXF1d9nnKjCV03yWgL2w3UMXBEH3C
 
 {
   "on": {
-    "on": false
+    "on": true
   }
 }
