@@ -27,6 +27,8 @@
 		"@types/debug": "^4.1.12",
 		"@types/node": "^22.10.2",
 		"@types/qs": "^6.9.17",
-		"typescript": "^5.7.2"
+		"typescript": "^5.7.2",
+    "eslint": "^8.57.1",
+    "prettier": "^3.3.3"
 	}
 }
