@@ -137,7 +137,7 @@ class PhilipsHue {
   private handleEventStreamUpdate(event: HueEvent) {
     for (const data of event.data) {
       if (["light", "grouped_light"].includes(data.type)) {
-        log.debug("event stream light update", data)
+        log.debug("event stream light update", data);
         this.syncLightState(data.id, data);
       }
     }
