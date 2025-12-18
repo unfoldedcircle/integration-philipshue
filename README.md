@@ -1,12 +1,41 @@
-# Philips Hue integration for Remote Two
+# Philips Hue integration for Remote Two/3
 
-### Installation
+Unfolded Circle Remote integration driver for Philips Hue lights.
+
+This integration driver is included in the Unfolded Circle Remote firmware and does not need to be run as an external
+integration to control Hue lights. A standalone driver can be used for development or custom functionality.
+
+The integration implements the UC Remote [Integration-API](https://github.com/unfoldedcircle/core-api) which
+communicates with JSON messages over WebSocket.
+
+## Standalone usage
+
+### Setup
+
+Requirements:
+
+- Remote Two firmware 1.9.3 or newer with support for custom integrations.
+- Install [nvm](https://github.com/nvm-sh/nvm) (Node.js version manager) for local development.
+- Node.js v20.16 or newer (older versions are not tested).
+- Install required libraries:
 
 `npm install`
 
-### Running the app
+### Run
 
-`node driver.js`
+Build JavaScript from TypeScript:
+
+```shell
+npm run build
+```
+
+Run as an external integration driver:
+
+```shell
+UC_CONFIG_HOME=. UC_INTEGRATION_HTTP_PORT=8097 npm run start
+```
+
+The configuration files are loaded & saved from the path specified in the environment variable `UC_CONFIG_HOME`.
 
 ### Configuration
 
@@ -77,3 +106,22 @@ Delete:
     }
 }
 ```
+
+## Versioning
+
+We use [SemVer](http://semver.org/) for versioning. For the versions available, see the
+[tags and releases on this repository](https://github.com/unfoldedcircle/integration-philipshue/releases).
+
+## Changelog
+
+The major changes found in each new release are listed in the [changelog](CHANGELOG.md)
+and under the GitHub [releases](https://github.com/unfoldedcircle/integration-philipshue/releases).
+
+## Contributions
+
+Please read our [contribution guidelines](CONTRIBUTING.md) before opening a pull request.
+
+## License
+
+This project is licensed under the [**Mozilla Public License 2.0**](https://choosealicense.com/licenses/mpl-2.0/).
+See the [LICENSE](LICENSE) file for details.
