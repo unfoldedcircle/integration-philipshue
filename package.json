@@ -13,7 +13,7 @@
     "start": "npm run build && node dist/driver.js"
   },
   "author": "Unfolded Circle",
-  "license": "ISC",
+  "license": "MPL-2.0",
   "dependencies": {
     "@unfoldedcircle/integration-api": "^0.3.0",
     "axios": "^1.7.0",
