@@ -8,6 +8,9 @@ integration to control Hue lights. A standalone driver can be used for developme
 The integration implements the UC Remote [Integration-API](https://github.com/unfoldedcircle/core-api) which
 communicates with JSON messages over WebSocket.
 
+> [!IMPORTANT]
+> Compatibility with the new Hue Bridge Pro has not yet been tested.
+
 ## Standalone usage
 
 ### Setup
