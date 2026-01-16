@@ -5,7 +5,7 @@
     "node": true
   },
   "plugins": ["prettier"],
-  "extends": ["semistandard", "prettier"],
+  "extends": ["prettier"],
   "rules": {
     "prettier/prettier": [
       "error",
