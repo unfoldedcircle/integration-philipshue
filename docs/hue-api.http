@@ -1,0 +1,50 @@
+### get hub config
+GET {{hue_bridge_url}}/api/config HTTP/1.1
+
+### generate api key
+### press link button on Hub, then send request
+POST {{hue_bridge_url}}/api HTTP/1.1
+Content-Type: application/json
+
+{"devicetype":"app_name#instance_name", "generateclientkey":true}
+
+### Response --> save `username` value to {{hue_api_key}} in your ###.env.json file
+# [
+#   {
+#     "success": {
+#       "username": "{{hue_api_key}}",
+#       "clientkey": "123..."
+#     }
+#   }
+# ]
+
+
+### get hub lights
+GET {{hue_bridge_url}}/clip/v2/resource/light HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### --> save a light id in `hue_light_id` in your ###.env.json file
+
+### get a specific hub light
+GET {{hue_bridge_url}}/clip/v2/resource/light/{{hue_light_id}} HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### turn light on
+PUT {{hue_bridge_url}}/clip/v2/resource/light/{{hue_light_id}} HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+{
+  "on": {
+    "on": true
+  }
+}
+
+### turn light off
+PUT {{hue_bridge_url}}/clip/v2/resource/light/{{hue_light_id}} HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+{
+  "on": {
+    "on": false
+  }
+}

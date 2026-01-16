@@ -1,5 +1,5 @@
 /**
- * This module implements the Spotify local configuration of the Remote Two/3 integration driver.
+ * This module implements the Philips Hue local configuration of the Remote Two/3 integration driver.
  *
  * @copyright (c) 2024 by Unfolded Circle ApS.
  * @license Mozilla Public License Version 2.0, see LICENSE for more details.

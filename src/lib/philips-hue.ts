@@ -1,3 +1,10 @@
+/**
+ * Philips Hue integration driver.
+ *
+ * @copyright (c) 2024 by Unfolded Circle ApS.
+ * @license Mozilla Public License Version 2.0, see LICENSE for more details.
+ */
+
 import {
   DeviceStates,
   Entity,

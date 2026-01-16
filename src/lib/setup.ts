@@ -1,3 +1,10 @@
+/**
+ * Setup flow of the Philips Hue integration driver.
+ *
+ * @copyright (c) 2024 by Unfolded Circle ApS.
+ * @license Mozilla Public License Version 2.0, see LICENSE for more details.
+ */
+
 import {
   DriverSetupRequest,
   RequestUserConfirmation,
@@ -114,11 +121,6 @@ class PhilipsHueSetup {
 
   private async handleHubDiscovery(): Promise<SetupAction> {
     this.hubs = [];
-    this.hubs.push({
-      id: "ECB5FAFFFE1FC75A",
-      ip: "10.0.10.73",
-      name: "Hue Bridge UC Office"
-    });
     this.bonjour.find({ type: "hue" }, (service) => {
       if (!service.referer?.address) {
         log.warn("Hue bridge discovery: no address found", service.host);

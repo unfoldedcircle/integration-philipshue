@@ -1,0 +1,22 @@
+### register integration driver as external integration
+
+POST {{uc_remote_url}}/api/intg/drivers
+Content-Type: application/json
+Authorization: Basic web-configurator:{{uc_web_cfg_pin}}
+
+{
+  "driver_id": "philips_hue_test",
+  "version": "0.0.1",
+  "min_core_api": "1.0.0",
+  "name": { "en": "Simulated Philips Hue driver", "de": "Simulierter Philips Hue-Treiber" },
+  "icon": "custom:my_driver_icon",
+  "description": { "en": "A simple demo integration with a simulated Philips Hue entity." },
+  "driver_url": "{{intg_driver_url}}",
+  "developer": {
+    "name": "John Doe",
+    "email": "john@doe.com",
+    "url": "https://www.unfoldedcircle.com"
+  },
+  "home_page": "https://www.unfoldedcircle.com",
+  "release_date": "2024-11-04"
+}

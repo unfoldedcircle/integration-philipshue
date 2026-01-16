@@ -1,3 +1,10 @@
+/**
+ * Philips Hue API for the Remote Two/3 integration driver.
+ *
+ * @copyright (c) 2024 by Unfolded Circle ApS.
+ * @license Mozilla Public License Version 2.0, see LICENSE for more details.
+ */
+
 export interface HubDeviceResult {
   errors: string[];
   data: DeviceResult[];

@@ -1,3 +1,10 @@
+/**
+ * Utility functions.
+ *
+ * @copyright (c) 2024 by Unfolded Circle ApS.
+ * @license Mozilla Public License Version 2.0, see LICENSE for more details.
+ */
+
 import { LightFeatures } from "@unfoldedcircle/integration-api";
 import fs from "fs";
 import { LightResource } from "./lib/hue-api/types.js";
