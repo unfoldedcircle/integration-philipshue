@@ -19,16 +19,20 @@ class HueEventStream extends EventEmitter {
     super();
   }
 
-  connect(hubUrl: string, authKey: string) {
+  connect(hubUrl: string, authKey: string, connectionTimeout: number = 6000) {
     if (this.connected) {
       return;
+    }
+    if (this.es) {
+      this.es.close();
     }
     const dispatcher = new Agent({
       connect: {
         rejectUnauthorized: false,
         checkServerIdentity: () => {
           return undefined;
-        }
+        },
+        timeout: connectionTimeout
       }
     });
     const headers = {
@@ -70,7 +74,7 @@ class HueEventStream extends EventEmitter {
     };
 
     this.es.onerror = (err) => {
-      log.debug("Philips Hue event stream error", err);
+      log.warn("Philips Hue event stream error %s: %s", err.code ? err.code : "", err.message);
       this.connected = false;
       this.emit("disconnected");
     };

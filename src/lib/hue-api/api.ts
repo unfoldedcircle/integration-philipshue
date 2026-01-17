@@ -17,11 +17,13 @@ export interface ResourceApi {
 
 class HueApi implements ResourceApi {
   private hubUrl: string;
+  private requestTimeout: number;
   public readonly lightResource: LightResource;
   private axiosInstance: AxiosInstance;
 
-  constructor(hubUrl: string) {
+  constructor(hubUrl: string, requestTimeout: number = 2000) {
     this.hubUrl = hubUrl;
+    this.requestTimeout = requestTimeout;
     this.lightResource = new LightResource(this);
     this.axiosInstance = axios.create({
       baseURL: this.hubUrl,
@@ -70,17 +72,19 @@ class HueApi implements ResourceApi {
       const { data } = await this.axiosInstance.request({
         method,
         url: endpoint,
-        data: body
+        data: body,
+        timeout: this.requestTimeout
       });
       return data;
     } catch (error: any) {
+      // FIXME return error code
       // axios error handing, taken from docs
       if (error.response) {
-        log.error("philips hue api response error", error.response.data);
+        log.error("philips hue api response error (%s %s)", method, endpoint, error.response.data);
       } else if (error.request) {
-        log.error("philips hue api request error", error.request);
+        log.error("philips hue api request error (%s %s) %s: %s", method, endpoint, error.code, error.message);
       } else {
-        log.error("philips hue api unknown error", error.message);
+        log.error("philips hue api unknown error (%s %s)", method, endpoint, error.message);
       }
     }
   }

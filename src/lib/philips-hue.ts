@@ -23,6 +23,7 @@ import {
   colorTempToMirek,
   convertHSVtoXY,
   convertXYtoHSV,
+  delay,
   getHubUrl,
   getLightFeatures,
   mirekToColorTemp,
@@ -79,11 +80,10 @@ class PhilipsHue {
   private setupEventStreamEvents() {
     const hubConfig = this.config.getHubConfig();
     this.eventStream.on("update", this.handleEventStreamUpdate.bind(this));
-    this.eventStream.on("disconnected", () => {
+    this.eventStream.on("disconnected", async () => {
       log.warn("Event stream disconnected, trying to reconnect");
-      setTimeout(() => {
-        this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
-      }, 2000);
+      await delay(2000);
+      this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
     });
   }
 
@@ -105,6 +105,7 @@ class PhilipsHue {
     switch (command) {
       case LightCommands.Toggle: {
         const currentState = entity.attributes?.[LightAttributes.State] as LightStates;
+        // TODO add response & error handling
         await this.hueApi.lightResource.setOn(entity.id, currentState !== LightStates.On);
         break;
       }
@@ -140,8 +141,6 @@ class PhilipsHue {
   private async handleConnect() {
     // make sure the integration state is set
     await this.uc.setDeviceState(DeviceStates.Connected);
-    // TODO test if the event stream needs to be reconnected?
-    // this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
     this.updateLights().catch((error) => console.error("Updating lights failed:", error));
   }
 
@@ -183,6 +182,7 @@ class PhilipsHue {
     for (const entity of this.uc.getConfiguredEntities().getEntities()) {
       const entityId = entity.entity_id as string;
       const lightResource = await this.hueApi.lightResource.getLight(entityId);
+      // FIXME error handling!
       if (lightResource.errors.length > 0) {
         log.error(`Error fetching light ${entityId}: ${lightResource.errors[0]}`);
         this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
