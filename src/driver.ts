@@ -8,4 +8,7 @@
 import PhilipsHue from "./lib/philips-hue.js";
 
 const philipsHue = new PhilipsHue();
-philipsHue.init();
+philipsHue.init().catch((error) => {
+  console.error("Initialization failed:", error);
+  process.exit(1);
+});

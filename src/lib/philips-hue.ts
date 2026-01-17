@@ -35,8 +35,8 @@ import PhilipsHueSetup from "./setup.js";
 
 class PhilipsHue {
   private uc: IntegrationAPI;
-  private config: Config;
-  private setup: PhilipsHueSetup;
+  private readonly config: Config;
+  private readonly setup: PhilipsHueSetup;
   private hueApi: HueApi;
   private eventStream: HueEventStream;
 
@@ -105,7 +105,7 @@ class PhilipsHue {
     switch (command) {
       case LightCommands.Toggle: {
         const currentState = entity.attributes?.[LightAttributes.State] as LightStates;
-        this.hueApi.lightResource.setOn(entity.id, currentState === LightStates.On ? false : true);
+        await this.hueApi.lightResource.setOn(entity.id, currentState !== LightStates.On);
         break;
       }
       case LightCommands.On:
@@ -138,14 +138,20 @@ class PhilipsHue {
   }
 
   private async handleConnect() {
-    this.updateLights();
+    // make sure the integration state is set
+    await this.uc.setDeviceState(DeviceStates.Connected);
+    // TODO test if the event stream needs to be reconnected?
+    // this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+    this.updateLights().catch((error) => console.error("Updating lights failed:", error));
   }
 
   private handleEventStreamUpdate(event: HueEvent) {
     for (const data of event.data) {
       if (["light", "grouped_light"].includes(data.type)) {
         log.debug("event stream light update", data);
-        this.syncLightState(data.id, data);
+        this.syncLightState(data.id, data).catch((error) =>
+          console.error("Syncing lights failed for event stream update:", error)
+        );
       }
     }
   }
@@ -161,7 +167,7 @@ class PhilipsHue {
 
   private async handleDisconnect() {
     this.eventStream.disconnect();
-    this.uc.setDeviceState(DeviceStates.Disconnected);
+    await this.uc.setDeviceState(DeviceStates.Disconnected);
   }
 
   private async handleEnterStandby() {
@@ -187,7 +193,7 @@ class PhilipsHue {
       const light = lightResource.data[0];
       const lightFeatures = getLightFeatures(light);
       this.config.updateLight(entityId, { name: light.metadata.name, features: lightFeatures });
-      this.syncLightState(entityId, light);
+      await this.syncLightState(entityId, light);
     }
   }
 

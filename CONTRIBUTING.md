@@ -16,7 +16,7 @@ and if it isn't already tracked, [create a new issue](https://github.com/unfolde
 
 We love contributions from everyone.
 
-⚠️ If you plan to make substantial changes, we kindly ask you, that you please reach out to us first.  
+⚠️ If you plan to make substantial changes, we kindly ask you that you please reach out to us first.  
 Either by opening a feature request describing your proposed changes before submitting code, or by contacting us on
 one of the other [feedback channels](#feedback-speech_balloon).
 

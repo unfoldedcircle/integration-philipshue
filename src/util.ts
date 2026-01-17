@@ -39,9 +39,9 @@ export function getLightFeatures(light: LightResource) {
 }
 
 export function convertXYtoHSV(x: number, y: number, lightness = 1) {
-  var Y = lightness;
-  var X = (x / y) * Y;
-  var Z = ((1 - x - y) / y) * Y;
+  const Y = lightness;
+  const X = (x / y) * Y;
+  const Z = ((1 - x - y) / y) * Y;
 
   const R = 3.2406 * X - 1.5372 * Y - 0.4986 * Z;
   const G = -0.9689 * X + 1.8758 * Y + 0.0415 * Z;

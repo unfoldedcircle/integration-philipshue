@@ -26,8 +26,8 @@ export type ConfigEvent =
 
 class Config {
   private config: PhilipsHueConfig = { hub: { ip: "", username: "" }, lights: {} };
-  private configPath: string;
-  private cb?: (event: ConfigEvent) => void;
+  private readonly configPath: string;
+  private readonly cb?: (event: ConfigEvent) => void;
 
   constructor(configDir: string, cb?: (event: ConfigEvent) => void) {
     this.configPath = path.join(configDir, CFG_FILENAME);

@@ -13,7 +13,6 @@ import { HueEvent } from "./types.js";
 
 class HueEventStream extends EventEmitter {
   private es: EventSource | null = null;
-  private reconnectInterval = 1000;
   private connected = false;
 
   constructor() {

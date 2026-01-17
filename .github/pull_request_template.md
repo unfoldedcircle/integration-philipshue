@@ -2,7 +2,7 @@
 
 <!---
 
-Please describe your changes, and why you're making them. Is this linked to an open issue, or another pull request?
+Please describe your changes and why you're making them. Is this linked to an open issue or another pull request?
 Link it here using the GitHub link feature, for example:
 
 Fixes #123

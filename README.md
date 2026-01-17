@@ -38,7 +38,7 @@ Run as an external integration driver:
 UC_CONFIG_HOME=. UC_INTEGRATION_HTTP_PORT=8097 npm run start
 ```
 
-The configuration files are loaded & saved from the path specified in the environment variable `UC_CONFIG_HOME`.
+The configuration files are loaded and saved from the path specified in the environment variable `UC_CONFIG_HOME`.
 
 ### Configuration
 
@@ -48,9 +48,9 @@ You need to manually register the driver and create an integration in the core:
 
 ---
 
-The driver uses discovery for Philips Hue. These will be available for the core to setup.
+The driver uses discovery for Philips Hue. These will be available for the core to set up.
 
-To register the integration send via websockets:
+To register the integration, send via websockets:
 
 ```
 {
