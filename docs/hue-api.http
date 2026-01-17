@@ -8,22 +8,41 @@ Content-Type: application/json
 
 {"devicetype":"app_name#instance_name", "generateclientkey":true}
 
-### Response --> save `username` value to {{hue_api_key}} in your ###.env.json file
-# [
-#   {
-#     "success": {
-#       "username": "{{hue_api_key}}",
-#       "clientkey": "123..."
-#     }
-#   }
-# ]
+> {%
+    // Extract the API key from the response
+    // To use it in the future, manually save it in `hue_api_key` of your ###.env.json file
+    const body = Array.isArray(response.body) ? response.body[0] : response.body;
+
+    client.test("Check for success object", function() {
+        client.assert(body && body.success, "Response did not contain a 'success' object. Check if the link button was pressed.");
+    });
+
+    if (body && body.success && body.success.username) {
+        client.global.set("hue_api_key", body.success.username);
+        client.log("Successfully captured API Key: " + client.global.get("hue_api_key"));
+    }
+%}
 
 
 ### get hub lights
 GET {{hue_bridge_url}}/clip/v2/resource/light HTTP/1.1
 hue-application-key: {{hue_api_key}}
 
-### --> save a light id in `hue_light_id` in your ###.env.json file
+> {%
+    // Extract the first light ID for the next requests
+    // To use it in the future, manually save it in `hue_light_id` of your ###.env.json file
+    client.test("Extract first light", function() {
+        const body = response.body;
+
+        client.assert(body && Array.isArray(body.data) && body.data.length > 0, "No data found in response");
+
+        const firstLight = body.data.find(item => item.type === "light");
+        client.assert(firstLight, "No resource with type 'light' found in the data array");
+
+        client.global.set("hue_light_id", firstLight.id);
+        client.log("Selected Light ID: " + client.global.get("hue_light_id"));
+    });
+%}
 
 ### get a specific hub light
 GET {{hue_bridge_url}}/clip/v2/resource/light/{{hue_light_id}} HTTP/1.1

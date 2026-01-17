@@ -17,7 +17,7 @@ communicates with JSON messages over WebSocket.
 
 Requirements:
 
-- Remote Two firmware 1.9.3 or newer with support for custom integrations.
+- Remote Two/3 firmware 1.9.3 or newer with support for custom integrations.
 - Install [nvm](https://github.com/nvm-sh/nvm) (Node.js version manager) for local development.
 - Node.js v22.13 or newer (older versions are not tested).
 - Install required libraries:
@@ -66,7 +66,7 @@ To register the integration send via websockets:
         "version": "0.0.1",
         "enabled": true,
         "description": {
-            "en": "Control your Philips Hue lights with Remote Two."
+            "en": "Control your Philips Hue lights with Remote Two/3."
         },
         "developer": {
 		"name": "Unfolded Circle",

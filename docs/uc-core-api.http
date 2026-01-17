@@ -1,22 +1,44 @@
 ### register integration driver as external integration
-
 POST {{uc_remote_url}}/api/intg/drivers
 Content-Type: application/json
-Authorization: Basic web-configurator:{{uc_web_cfg_pin}}
+Authorization: Basic {{uc_username}} {{uc_password}}
 
 {
-  "driver_id": "philips_hue_test",
-  "version": "0.0.1",
+  "driver_id": "philips_hue_dev",
+  "version": "0.4.0-dev.1",
   "min_core_api": "1.0.0",
-  "name": { "en": "Simulated Philips Hue driver", "de": "Simulierter Philips Hue-Treiber" },
-  "icon": "custom:my_driver_icon",
-  "description": { "en": "A simple demo integration with a simulated Philips Hue entity." },
+  "name": { "en": "Philips Hue DEV" },
+  "icon": "uc:integration",
+  "description": { "en": "Control your Philips Hue lights with Remote Two/3." },
   "driver_url": "{{intg_driver_url}}",
   "developer": {
-    "name": "John Doe",
-    "email": "john@doe.com",
-    "url": "https://www.unfoldedcircle.com"
+    "name": "Unfolded Circle ApS",
+    "email": "hello@unfoldedcircle.com",
+    "url": "https://github.com/unfoldedcircle/integration-philipshue"
   },
   "home_page": "https://www.unfoldedcircle.com",
-  "release_date": "2024-11-04"
+  "setup_data_schema": {
+    "title": {
+      "en": "Integration setup",
+      "de": "Integrationssetup"
+    },
+    "settings": [
+      {
+        "id": "info",
+        "label": {
+          "en": "Discovering bridges",
+          "de": "Setup Fortschritt"
+        },
+        "field": {
+          "label": {
+            "value": {
+              "en": "The integration will discover Philips Hue Bridges on your network. After selecting one for setup, you'll need to press the button on the bridge, when prompted. Tap `Next` to start.",
+              "de": "Die Integration sucht Philips Hue Bridges in deinem Netzwerk. Nachdem du eine Bridge für die Einrichtung ausgewählt hast, musst du die Taste auf der Bridges drücken, wenn du dazu aufgefordert wirst. Tippe auf `Weiter`, um zu starten."
+            }
+          }
+        }
+      }
+    ]
+  },
+  "release_date": "2025-01-17"
 }
