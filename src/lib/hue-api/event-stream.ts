@@ -53,15 +53,11 @@ class HueEventStream extends EventEmitter {
     });
 
     this.es.onopen = () => {
-      this.connected = true;
-      this.emit("connected");
-    };
-
-    this.es.onopen = () => {
       log.debug("Philips Hue event stream connected");
       this.connected = true;
       this.emit("connected");
     };
+
     this.es.onmessage = (event) => {
       try {
         const messages = JSON.parse(event.data) as HueEvent[];
@@ -81,10 +77,11 @@ class HueEventStream extends EventEmitter {
   }
 
   disconnect() {
+    log.debug("Disconnecting Philips Hue event stream");
     if (this.es) {
       this.es.close();
       this.connected = false;
-      this.emit("disconnected");
+      // do not emit "disconnected" event, otherwise a reconnection is triggered
     }
   }
 }

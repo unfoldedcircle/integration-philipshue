@@ -29,7 +29,7 @@ import {
   mirekToColorTemp,
   percentToBrightness
 } from "../util.js";
-import HueApi from "./hue-api/api.js";
+import HueApi, { HueError } from "./hue-api/api.js";
 import HueEventStream from "./hue-api/event-stream.js";
 import { HueEvent, LightResource, LightResourceParams } from "./hue-api/types.js";
 import PhilipsHueSetup from "./setup.js";
@@ -80,8 +80,14 @@ class PhilipsHue {
   private setupEventStreamEvents() {
     const hubConfig = this.config.getHubConfig();
     this.eventStream.on("update", this.handleEventStreamUpdate.bind(this));
+    this.eventStream.on("connected", async () => {
+      log.info("Event stream connected, updating lights");
+      this.updateLights().catch((error) => log.error("Updating lights after event stream connection failed:", error));
+    });
     this.eventStream.on("disconnected", async () => {
-      log.warn("Event stream disconnected, trying to reconnect");
+      log.info("Event stream disconnected, trying to reconnect");
+      // most likely the Hub is no longer available: set all configured lights to state UNKNOWN
+      this.updateEntityStates(LightStates.Unknown);
       await delay(2000);
       this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
     });
@@ -102,78 +108,95 @@ class PhilipsHue {
   }
 
   private async handleLightCmd(entity: Entity, command: string, params?: { [key: string]: string | number | boolean }) {
-    switch (command) {
-      case LightCommands.Toggle: {
-        const currentState = entity.attributes?.[LightAttributes.State] as LightStates;
-        // TODO add response & error handling
-        await this.hueApi.lightResource.setOn(entity.id, currentState !== LightStates.On);
-        break;
-      }
-      case LightCommands.On:
-        const req: Partial<LightResourceParams> = {};
-        // ("brightness" (0-255), "color_temperature" (0-100), "hue", "saturation".)
-        if (params?.brightness !== undefined) {
-          if (params.brightness === 0) {
-            req.on = { on: false };
-          } else {
-            req.dimming = { brightness: brightnessToPercent(Number(params.brightness)) };
-            req.on = { on: true };
+    try {
+      switch (command) {
+        case LightCommands.Toggle: {
+          const currentState = entity.attributes?.[LightAttributes.State] as LightStates;
+          await this.hueApi.lightResource.setOn(entity.id, currentState !== LightStates.On);
+          break;
+        }
+        case LightCommands.On: {
+          const req: Partial<LightResourceParams> = {};
+          // ("brightness" (0-255), "color_temperature" (0-100), "hue", "saturation".)
+          if (params?.brightness !== undefined) {
+            if (params.brightness === 0) {
+              req.on = { on: false };
+            } else {
+              req.dimming = { brightness: brightnessToPercent(Number(params.brightness)) };
+              req.on = { on: true };
+            }
           }
+          if (params?.color_temperature !== undefined) {
+            req.color_temperature = { mirek: colorTempToMirek(Number(params.color_temperature)) };
+          }
+          if (params?.hue !== undefined && params?.saturation !== undefined) {
+            req.color = { xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), 1) };
+          }
+          await this.hueApi.lightResource.updateLightState(entity.id, req);
+          break;
         }
-        if (params?.color_temperature !== undefined) {
-          req.color_temperature = { mirek: colorTempToMirek(Number(params.color_temperature)) };
-        }
-        if (params?.hue !== undefined && params?.saturation !== undefined) {
-          req.color = { xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), 1) };
-        }
-        await this.hueApi.lightResource.updateLightState(entity.id, req);
-        break;
-      case LightCommands.Off:
-        await this.hueApi.lightResource.setOn(entity.id, false);
-        break;
-      default:
-        log.error(`handleLightCmd, Unsupported command: ${command}`);
-        return StatusCodes.BadRequest;
+        case LightCommands.Off:
+          await this.hueApi.lightResource.setOn(entity.id, false);
+          break;
+        default:
+          log.error("handleLightCmd, unsupported command: %s", command);
+          return StatusCodes.BadRequest;
+      }
+      return StatusCodes.Ok;
+    } catch (error) {
+      if (error instanceof HueError) {
+        // TODO check for connection error and set entity to state UNKNOWN or even UNAVAILABLE?
+        //      --> consider this logic after there's a status polling feature.
+        //      The event stream requires further testing and is rather slow detecting a network disconnection!
+        return error.statusCode;
+      }
+      log.error("handleLightCmd error", error);
+      return StatusCodes.ServerError;
     }
-    return StatusCodes.Ok;
   }
 
   private async handleConnect() {
+    log.debug("Got connect event");
     // make sure the integration state is set
     await this.uc.setDeviceState(DeviceStates.Connected);
-    this.updateLights().catch((error) => console.error("Updating lights failed:", error));
+    this.updateLights().catch((error) => log.error("Updating lights failed:", error));
   }
 
   private handleEventStreamUpdate(event: HueEvent) {
     for (const data of event.data) {
       if (["light", "grouped_light"].includes(data.type)) {
-        log.debug("event stream light update", data);
+        log.debug("event stream light update: %s", JSON.stringify(data));
         this.syncLightState(data.id, data).catch((error) =>
-          console.error("Syncing lights failed for event stream update:", error)
+          log.error("Syncing lights failed for event stream update:", error)
         );
       }
     }
   }
 
   private async handleSubscribeEntities() {
+    // TODO verify command: entity IDs parameter seems missing!
     const hubConfig = this.config.getHubConfig();
     this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
   }
 
   private async handleUnsubscribeEntities() {
+    // TODO verify command: entity IDs parameter seems missing!
     this.eventStream.disconnect();
   }
 
   private async handleDisconnect() {
+    log.debug("Got disconnect event");
     this.eventStream.disconnect();
     await this.uc.setDeviceState(DeviceStates.Disconnected);
   }
 
   private async handleEnterStandby() {
+    log.info("Entering standby mode");
     this.eventStream.disconnect();
   }
 
   private async handleExitStandby() {
+    log.info("Exiting standby mode");
     const hubConfig = this.config.getHubConfig();
     this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
   }
@@ -181,20 +204,49 @@ class PhilipsHue {
   private async updateLights() {
     for (const entity of this.uc.getConfiguredEntities().getEntities()) {
       const entityId = entity.entity_id as string;
-      const lightResource = await this.hueApi.lightResource.getLight(entityId);
-      // FIXME error handling!
-      if (lightResource.errors.length > 0) {
-        log.error(`Error fetching light ${entityId}: ${lightResource.errors[0]}`);
+      try {
+        const lightResource = await this.hueApi.lightResource.getLight(entityId);
+        if (lightResource.errors && lightResource.errors.length > 0) {
+          log.error("Error fetching light %s: %s", entityId, JSON.stringify(lightResource.errors[0]));
+          this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
+            [LightAttributes.State]: LightStates.Unavailable
+          });
+          // TODO probably best to define a max error limit: e.g. abort after 3-5 failed requests
+          continue;
+        }
+
+        const light = lightResource.data?.[0];
+        if (!light) {
+          log.warn("Light %s not found in bridge response", entityId);
+          continue;
+        }
+
+        const lightFeatures = getLightFeatures(light);
+        this.config.updateLight(entityId, { name: light.metadata.name, features: lightFeatures });
+        await this.syncLightState(entityId, light);
+      } catch (error: unknown) {
+        if (error instanceof HueError) {
+          log.error(
+            "Failed to update light %s: %s %s (%s)",
+            entityId,
+            error.statusCode,
+            error.message,
+            // @ts-ignore
+            error.cause?.message ? error.cause?.message : ""
+          );
+        } else {
+          log.error("Failed to update light %s: %s", entityId, error);
+        }
+
+        // Note: a polling feature might be required to check the Hub's connection state.
+        //       States are updated once the event stream is re-connected.
+        //       But this might be rather slow, especially if the stream is still connected if an error occurs here!
         this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
           [LightAttributes.State]: LightStates.Unavailable
         });
-        return;
       }
-      const light = lightResource.data[0];
-      const lightFeatures = getLightFeatures(light);
-      this.config.updateLight(entityId, { name: light.metadata.name, features: lightFeatures });
-      await this.syncLightState(entityId, light);
     }
+    // TODO if an error occurred while updating lights: perform a manual connectivity test and set entity states
   }
 
   private async syncLightState(entityId: string, light: Partial<LightResource>) {
@@ -203,7 +255,7 @@ class PhilipsHue {
       log.warn("entity is not configured, skipping sync", entityId);
       return;
     }
-    const lightState: Record<string, any> = {};
+    const lightState: Record<string, string | number> = {};
     if (light.on) {
       lightState[LightAttributes.State] = light.on.on ? LightStates.On : LightStates.Off;
     }
@@ -222,6 +274,23 @@ class PhilipsHue {
       lightState[LightAttributes.Saturation] = sat;
     }
     this.uc.getConfiguredEntities().updateEntityAttributes(entityId, lightState);
+  }
+
+  private updateEntityStates(state: LightStates) {
+    const configured = this.uc.getConfiguredEntities();
+    for (const configuredEntity of configured.getEntities()) {
+      const entityId = configuredEntity.entity_id as string;
+      const entity = configured.getEntity(entityId);
+      if (!entity) {
+        continue;
+      }
+      // prevent repeating entity updates for every reconnection attempt
+      if (entity.attributes?.[LightAttributes.State] !== state) {
+        configured.updateEntityAttributes(entityId, {
+          [LightAttributes.State]: state
+        });
+      }
+    }
   }
 }
 

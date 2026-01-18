@@ -77,8 +77,8 @@ class PhilipsHueSetup {
           username: authKey.username
         });
         const { data, errors } = await this.hueApi.lightResource.getLights();
-        if (errors.length > 0) {
-          return new SetupError("Failed to get lights");
+        if (errors && errors.length > 0) {
+          return new SetupError(`Failed to get lights: ${JSON.stringify(errors[0])}`);
         }
         this.addAvailableLights(data);
         return new SetupComplete();
