@@ -8,14 +8,15 @@
 import { LightFeatures } from "@unfoldedcircle/integration-api";
 import fs from "fs";
 import { LightResource } from "./lib/hue-api/types.js";
+import log from "./log.js";
 
 export function convertImageToBase64(file: string) {
   let data;
 
   try {
     data = fs.readFileSync(file, "base64");
-  } catch (e) {
-    console.error(e);
+  } catch (e: unknown) {
+    log.error("Failed to read image file %s: %s", file, e instanceof Error ? e.message : e);
   }
   return data;
 }

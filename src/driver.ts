@@ -6,9 +6,11 @@
  */
 
 import PhilipsHue from "./lib/philips-hue.js";
+import log from "./log.js";
 
 const philipsHue = new PhilipsHue();
-philipsHue.init().catch((error) => {
-  console.error("Initialization failed:", error);
+philipsHue.init().catch((error: unknown) => {
+  // log full error object, because this should not happen
+  log.error("Initialization failed:", error);
   process.exit(1);
 });

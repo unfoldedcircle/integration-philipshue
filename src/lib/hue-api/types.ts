@@ -14,7 +14,7 @@ interface DeviceResult {
   id: string;
   product_data: ProductData;
   metadata: Metadata;
-  identify: Record<string, any>;
+  identify: Record<string, unknown>;
   services: Service[];
   type: string;
   id_v1?: string;
@@ -41,7 +41,7 @@ interface Service {
 }
 
 export interface LightResourceResult {
-  errors: any[];
+  errors: { description: string }[];
   data: LightResource[];
 }
 
@@ -60,7 +60,7 @@ export interface LightResource {
   product_data: {
     function: string;
   };
-  identify: any;
+  identify: unknown;
   service_id: number;
   on: {
     on: boolean;
@@ -69,7 +69,7 @@ export interface LightResource {
     brightness: number;
     min_dim_level?: number;
   };
-  dimming_delta: any;
+  dimming_delta: unknown;
   color_temperature?: {
     mirek: number;
     mirek_valid: boolean;
@@ -78,7 +78,7 @@ export interface LightResource {
       mirek_maximum: number;
     };
   };
-  color_temperature_delta: any;
+  color_temperature_delta: unknown;
   color?: {
     xy: {
       x: number;
@@ -202,7 +202,7 @@ export interface HueEvent {
   data: {
     id: string;
     type: string;
-    [key: string]: any;
+    [key: string]: unknown;
   }[];
   creationtime: string;
 }
