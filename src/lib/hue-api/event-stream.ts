@@ -78,9 +78,9 @@ class HueEventStream extends EventEmitter {
 
   disconnect() {
     log.debug("Disconnecting Philips Hue event stream");
+    this.connected = false;
     if (this.es) {
       this.es.close();
-      this.connected = false;
       // do not emit "disconnected" event, otherwise a reconnection is triggered
     }
   }

@@ -45,8 +45,10 @@ class PhilipsHue {
     this.uc = new IntegrationAPI();
     this.config = new Config(this.uc.getConfigDirPath(), this.handleConfigEvent.bind(this));
     this.setup = new PhilipsHueSetup(this.config);
-    this.hueApi = new HueApi("");
+    this.hueApi = new HueApi();
     this.eventStream = new HueEventStream();
+    this.config.on("change", this.onCfgChange.bind(this));
+    this.config.on("remove", this.onCfgRemove.bind(this));
   }
 
   async init() {
@@ -95,6 +97,20 @@ class PhilipsHue {
         this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
       }
     });
+  }
+
+  private async onCfgChange(_bridgeId: string) {
+    const hubCfg = this.config.getHubConfig();
+
+    this.eventStream.disconnect();
+    if (hubCfg) {
+      this.eventStream.connect(getHubUrl(hubCfg.ip), hubCfg.username);
+    }
+  }
+
+  private async onCfgRemove(_bridgeId?: string) {
+    this.eventStream.disconnect();
+    this.updateEntityStates(LightStates.Unavailable);
   }
 
   // terri: check if you can simplify since

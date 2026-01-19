@@ -6,6 +6,7 @@
  */
 
 import { LightFeatures } from "@unfoldedcircle/integration-api";
+import EventEmitter from "node:events";
 import fs from "fs";
 import path from "path";
 
@@ -24,12 +25,13 @@ export type ConfigEvent =
   | { type: "light-added"; data: LightConfig & { id: string } }
   | { type: "light-updated"; data: LightConfig & { id: string } };
 
-class Config {
+class Config extends EventEmitter {
   private config: PhilipsHueConfig = { lights: {} };
   private readonly configPath: string;
   private readonly cb?: (event: ConfigEvent) => void;
 
   constructor(configDir: string, cb?: (event: ConfigEvent) => void) {
+    super();
     this.configPath = path.join(configDir, CFG_FILENAME);
     this.loadFromFile();
     this.cb = cb;
@@ -56,7 +58,9 @@ class Config {
       };
     }
     this.saveToFile();
-    // TODO trigger event that configuration changed
+    if (this.config.hub) {
+      this.emit("change", this.config.hub.bridgeId);
+    }
   }
 
   public addLight(id: string, light: LightConfig) {
@@ -81,15 +85,18 @@ class Config {
   }
 
   public removeHub() {
+    const bridgeId = this.config.hub?.bridgeId;
     this.config.hub = undefined;
     this.saveToFile();
-    // TODO trigger device instance removal
+    if (bridgeId) {
+      this.emit("remove", bridgeId);
+    }
   }
 
   public clear() {
     this.config = { lights: {} };
     this.saveToFile();
-    // TODO trigger device instance removal
+    this.emit("remove", null);
   }
 
   private loadFromFile() {
