@@ -1,6 +1,13 @@
 ### get hub config
 GET {{hue_bridge_url}}/api/config HTTP/1.1
 
+### check authentication
+GET {{hue_bridge_url}}/auth/v1 HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### get account
+GET {{hue_bridge_url}}/api/{{hue_api_key}}/config HTTP/1.1
+
 ### generate api key
 ### press link button on Hub, then send request
 POST {{hue_bridge_url}}/api HTTP/1.1
@@ -23,8 +30,31 @@ Content-Type: application/json
     }
 %}
 
+### get resources
+GET {{hue_bridge_url}}/clip/v2/resource HTTP/1.1
+hue-application-key: {{hue_api_key}}
 
-### get hub lights
+### get scenes
+### Scenes are used to store and recall settings for a group of lights.
+GET {{hue_bridge_url}}/clip/v2/resource/scene HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### get rooms
+### Rooms group devices and each device can only be part of one room.
+GET {{hue_bridge_url}}/clip/v2/resource/room HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### get zones
+### Zones group services and each service can be part of multiple zones.
+GET {{hue_bridge_url}}/clip/v2/resource/zone HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### get grouped lights
+GET {{hue_bridge_url}}/clip/v2/resource/grouped_light HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### get light services
+### These are offered by devices with lighting capabilities.
 GET {{hue_bridge_url}}/clip/v2/resource/light HTTP/1.1
 hue-application-key: {{hue_api_key}}
 
@@ -67,3 +97,11 @@ hue-application-key: {{hue_api_key}}
     "on": false
   }
 }
+
+### get temperature services
+GET {{hue_bridge_url}}/clip/v2/resource/temperature HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### get light level services
+GET {{hue_bridge_url}}/clip/v2/resource/light_level HTTP/1.1
+hue-application-key: {{hue_api_key}}

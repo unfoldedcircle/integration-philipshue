@@ -1,0 +1,35 @@
+{
+  "setup": {
+    "configuration": {
+      "title": "Mode configuration",
+      "add": "Ajouter un nouvel appareil",
+      "info": "Afficher les informations du hub Hue",
+      "remove": "Supprimer l'appareil sélectionné",
+      "reset": "Réinitialiser la configuration et reconfigurer",
+      "configured_devices": "Appareils configurés",
+      "action": "Action"
+    },
+    "discovery": {
+      "title": "Setup mode",
+      "info": "Découvrir ou connexion à Philips Hue hub",
+      "description": "Laissez le champ vide pour utiliser la découverte automatique et cliquez sur _Suivant_. L'appareil doit être sur le même réseau que la télécommande",
+      "address": "Adresse IP (configuration manuel)",
+      "discovered_title": "setup.discovery.discovered_title",
+      "discovered_hubs": "setup.discovery.discovered_hubs"
+    },
+    "discovery_failed": {
+      "title": "Aucun nouveaux Philips Hue hub",
+      "header": "Veuillez vous assurer que votre Philips Hue hub est sous tension et accessibles depuis le même réseau que la télécommande. Les appareils déjà configurés sont exclus de la découverte.\nCliquez sur Suivant pour réessayer, ou fermez cette boîte de dialogue pour abandonner."
+    },
+    "confirmation": {
+      "title": "Configuration de Philips Hue",
+      "header": "Action de l'utilisateur requise",
+      "footer": "Veuillez appuyer sur le bouton du pont Philips Hue et cliquer sur _Suivant_."
+    },
+    "info": {
+      "title": "Informations sur le hub",
+      "not_configured": "Aucun hub configuré.",
+      "lights": "Lumières disponibles"
+    }
+  }
+}

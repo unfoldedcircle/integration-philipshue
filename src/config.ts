@@ -16,7 +16,7 @@ export interface LightConfig {
   features: LightFeatures[];
 }
 interface PhilipsHueConfig {
-  hub: { ip: string; username: string };
+  hub?: { name: string; ip: string; username: string; bridgeId: string };
   lights: { [key: string]: LightConfig };
 }
 
@@ -25,7 +25,7 @@ export type ConfigEvent =
   | { type: "light-updated"; data: LightConfig & { id: string } };
 
 class Config {
-  private config: PhilipsHueConfig = { hub: { ip: "", username: "" }, lights: {} };
+  private config: PhilipsHueConfig = { lights: {} };
   private readonly configPath: string;
   private readonly cb?: (event: ConfigEvent) => void;
 
@@ -39,9 +39,24 @@ class Config {
     return this.config.hub;
   }
 
-  public updateHubConfig(hub: Partial<PhilipsHueConfig["hub"]>) {
-    this.config.hub = { ...this.config.hub, ...hub };
+  public updateHubConfig(hub: Partial<NonNullable<PhilipsHueConfig["hub"]>>) {
+    if (!this.config.hub && hub.name && hub.ip && hub.username && hub.bridgeId) {
+      this.config.hub = {
+        name: hub.name,
+        ip: hub.ip,
+        username: hub.username,
+        bridgeId: hub.bridgeId
+      };
+    } else if (this.config.hub) {
+      this.config.hub = {
+        name: hub.name ?? this.config.hub.name,
+        ip: hub.ip ?? this.config.hub.ip,
+        username: hub.username ?? this.config.hub.username,
+        bridgeId: hub.bridgeId ?? this.config.hub.bridgeId
+      };
+    }
     this.saveToFile();
+    // TODO trigger event that configuration changed
   }
 
   public addLight(id: string, light: LightConfig) {
@@ -63,6 +78,18 @@ class Config {
 
   public getLight(id: string): LightConfig | undefined {
     return this.config.lights[id];
+  }
+
+  public removeHub() {
+    this.config.hub = undefined;
+    this.saveToFile();
+    // TODO trigger device instance removal
+  }
+
+  public clear() {
+    this.config = { lights: {} };
+    this.saveToFile();
+    // TODO trigger device instance removal
   }
 
   private loadFromFile() {

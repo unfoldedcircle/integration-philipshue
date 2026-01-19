@@ -108,3 +108,5 @@ configured.json
 
 # JetBrains
 http-client.private.env.json
+
+/philips_hue_config.json

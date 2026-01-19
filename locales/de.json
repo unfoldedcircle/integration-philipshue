@@ -1,0 +1,35 @@
+{
+  "setup": {
+    "configuration": {
+      "title": "Konfigurations-Modus",
+      "add": "Neues Gerät hinzufügen",
+      "info": "Hue Hub Informationen",
+      "remove": "Selektiertes Gerät löschen",
+      "reset": "Konfiguration zurücksetzen und neu konfigurieren",
+      "configured_devices": "Konfigurierte Geräte",
+      "action": "Aktion"
+    },
+    "discovery": {
+      "title": "Setup Modus",
+      "info": "Suche oder Verbinde auf Philips Hue Hub",
+      "description": "Leer lassen, um automatische Erkennung zu verwenden und auf _Weiter_ klicken. Der Hue Hub muss sich im gleichen Netzwerk wie die Fernbedienung befinden.",
+      "address": "IP-Adresse (manuelle Konfiguration)",
+      "discovered_title": "Wähle deinen Philips Hue Hub aus",
+      "discovered_hubs": "Gefundene Hubs"
+    },
+    "discovery_failed": {
+      "title": "Keine neuen Philips Hue Hubs gefunden",
+      "header": "Vergewissere dich, dass der Philips Hue Hub eingeschaltet und über das gleiche Netzwerk wie die Fernbedienung erreichbar ist. Bereits konfigurierte Geräte werden von der Erkennung ausgeschlossen.\nKlicke auf Weiter, um es erneut zu versuchen, oder schließe diesen Dialog, um abzubrechen."
+    },
+    "confirmation": {
+      "title": "Philips Hue Setup",
+      "header": "Benutzeraktion erforderlich",
+      "footer": "Bitte drücke die Taste auf der Philips Hue Bridge und klicke danach auf _Weiter_."
+    },
+    "info": {
+      "title": "Hub Information",
+      "not_configured": "Kein Hub konfiguriert.",
+      "lights": "Verfügbare Lichter"
+    }
+  }
+}

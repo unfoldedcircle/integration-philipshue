@@ -1,0 +1,35 @@
+{
+  "setup": {
+    "configuration": {
+      "title": "Configuration mode",
+      "add": "Add a new device",
+      "info": "Show Hue hub information",
+      "remove": "Delete selected Hue hub",
+      "reset": "Reset configuration and reconfigure",
+      "configured_devices": "Configured Hue hubs",
+      "action": "Action"
+    },
+    "discovery": {
+      "title": "Setup mode",
+      "info": "Discover or connect to Philips Hue hub",
+      "description": "Leave blank to use auto-discovery and click _Next_. The device must be on the same network as the remote.",
+      "address": "IP address (manual configuration)",
+      "discovered_title": "Select your Philips Hue hub",
+      "discovered_hubs": "Discovered hubs"
+    },
+    "discovery_failed": {
+      "title": "No new Philips Hue hubs found",
+      "header": "Please make sure that your Philips Hue hub is powered on and accessible from the same network as the remote. Already configured devices are excluded from the discovery.\nClick Next to try again, or close this dialog to abort."
+    },
+    "confirmation": {
+      "title": "Philips Hue setup",
+      "header": "User action needed",
+      "footer": "Please press the button on the Philips Hue Bridge and click _Next_."
+    },
+    "info": {
+      "title": "Hub information",
+      "not_configured": "No hub configured.",
+      "lights": "Available lights"
+    }
+  }
+}

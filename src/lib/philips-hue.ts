@@ -52,8 +52,10 @@ class PhilipsHue {
   async init() {
     this.uc.init("driver.json", this.setup.handleSetup.bind(this.setup));
     const hubConfig = this.config.getHubConfig();
-    this.hueApi.setBaseUrl(getHubUrl(hubConfig.ip));
-    this.hueApi.setAuthKey(hubConfig.username);
+    if (hubConfig && hubConfig.ip) {
+      this.hueApi.setBaseUrl(getHubUrl(hubConfig.ip));
+      this.hueApi.setAuthKey(hubConfig.username);
+    }
     this.readEntitiesFromConfig();
     this.setupDriverEvents();
     this.setupEventStreamEvents();
@@ -89,7 +91,9 @@ class PhilipsHue {
       // most likely the Hub is no longer available: set all configured lights to state UNKNOWN
       this.updateEntityStates(LightStates.Unknown);
       await delay(2000);
-      this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+      if (hubConfig && hubConfig.ip) {
+        this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+      }
     });
   }
 
@@ -176,7 +180,9 @@ class PhilipsHue {
   private async handleSubscribeEntities() {
     // TODO verify command: entity IDs parameter seems missing!
     const hubConfig = this.config.getHubConfig();
-    this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+    if (hubConfig && hubConfig.ip) {
+      this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+    }
   }
 
   private async handleUnsubscribeEntities() {
@@ -198,28 +204,16 @@ class PhilipsHue {
   private async handleExitStandby() {
     log.info("Exiting standby mode");
     const hubConfig = this.config.getHubConfig();
-    this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+    if (hubConfig && hubConfig.ip) {
+      this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+    }
   }
 
   private async updateLights() {
     for (const entity of this.uc.getConfiguredEntities().getEntities()) {
       const entityId = entity.entity_id as string;
       try {
-        const lightResource = await this.hueApi.lightResource.getLight(entityId);
-        if (lightResource.errors && lightResource.errors.length > 0) {
-          log.error("Error fetching light %s: %s", entityId, JSON.stringify(lightResource.errors[0]));
-          this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
-            [LightAttributes.State]: LightStates.Unavailable
-          });
-          // TODO probably best to define a max error limit: e.g. abort after 3-5 failed requests
-          continue;
-        }
-
-        const light = lightResource.data?.[0];
-        if (!light) {
-          log.warn("Light %s not found in bridge response", entityId);
-          continue;
-        }
+        const light = await this.hueApi.lightResource.getLight(entityId);
 
         const lightFeatures = getLightFeatures(light);
         this.config.updateLight(entityId, { name: light.metadata.name, features: lightFeatures });
@@ -231,16 +225,19 @@ class PhilipsHue {
             entityId,
             error.statusCode,
             error.message,
-            // @ts-ignore
+            // @ts-expect-error best effort logging
             error.cause?.message ? error.cause?.message : ""
           );
         } else {
           log.error("Failed to update light %s: %s", entityId, error);
         }
 
+        // TODO probably best to define a max error limit: e.g. abort after 3-5 failed requests
+
         // Note: a polling feature might be required to check the Hub's connection state.
         //       States are updated once the event stream is re-connected.
         //       But this might be rather slow, especially if the stream is still connected if an error occurs here!
+        // TODO is UNAVAILABLE the correct state? The light cannot be controlled anymore until it sends an update!
         this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
           [LightAttributes.State]: LightStates.Unavailable
         });
@@ -250,9 +247,14 @@ class PhilipsHue {
   }
 
   private async syncLightState(entityId: string, light: Partial<LightResource>) {
+    // only `light` types are supported at the moment: ignore everything else
+    if (light.type !== "light") {
+      return;
+    }
+
     const entity = this.uc.getConfiguredEntities().getEntity(entityId);
     if (!entity) {
-      log.warn("entity is not configured, skipping sync", entityId);
+      log.debug("entity is not configured, skipping sync", entityId);
       return;
     }
     const lightState: Record<string, string | number> = {};

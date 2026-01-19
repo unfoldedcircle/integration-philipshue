@@ -9,6 +9,7 @@ import axios, { AxiosInstance } from "axios";
 import https from "node:https";
 import { StatusCodes } from "@unfoldedcircle/integration-api";
 import log from "../../log.js";
+import { normalizeBridgeId } from "../../util.js";
 import LightResource from "./light-resource.js";
 import { AuthenticateResult, AuthenticateSuccess, HubConfig } from "./types.js";
 
@@ -33,24 +34,24 @@ export interface ResourceApi {
    * @param method The HTTP method (GET, POST, PUT).
    * @param endpoint The API endpoint.
    * @param body Optional request body.
+   * @param authRequired Whether an authentication key is required for this request.
    * @returns The API response data.
    * @throws {HueError} If the request fails or returns an error status.
    */
-  sendRequest<T>(method: "GET" | "POST" | "PUT", endpoint: string, body?: unknown): Promise<T>;
+  sendRequest<T>(method: "GET" | "POST" | "PUT", endpoint: string, body?: unknown, authRequired?: boolean): Promise<T>;
 }
 
 class HueApi implements ResourceApi {
-  private hubUrl: string;
-  private requestTimeout: number;
+  private hubUrl?: string;
   public readonly lightResource: LightResource;
   private axiosInstance: AxiosInstance;
 
-  constructor(hubUrl: string, requestTimeout: number = 1500) {
+  constructor(hubUrl?: string, requestTimeout: number = 1500) {
     this.hubUrl = hubUrl;
-    this.requestTimeout = requestTimeout;
     this.lightResource = new LightResource(this);
     this.axiosInstance = axios.create({
       baseURL: this.hubUrl,
+      timeout: requestTimeout,
       httpsAgent: new https.Agent({
         rejectUnauthorized: false,
         checkServerIdentity: () => {
@@ -72,24 +73,33 @@ class HueApi implements ResourceApi {
   private handleError(error: unknown, method: string, endpoint: string): never {
     if (axios.isAxiosError(error)) {
       if (error.response) {
+        const responseData = error.response.data;
         log.error(
           "Philips Hue API response error (%s %s) %d: %j",
           method,
           endpoint,
           error.response.status,
-          error.response.data
+          responseData
         );
+
+        // Try to extract a meaningful error message from the response body (V2 API)
+        let message = "";
+        if (responseData && Array.isArray(responseData.errors) && responseData.errors.length > 0) {
+          const firstError = responseData.errors[0];
+          message = typeof firstError === "string" ? firstError : firstError.description || "";
+        }
+
         const status = error.response.status;
         switch (status) {
           case 400:
-            throw new HueError("Bad request", StatusCodes.BadRequest, error);
+            throw new HueError(message || "Bad request", StatusCodes.BadRequest, error);
           case 401:
           case 403:
-            throw new HueError("Unauthorized", StatusCodes.Unauthorized, error);
+            throw new HueError(message || "Unauthorized", StatusCodes.Unauthorized, error);
           case 404:
-            throw new HueError("Not found", StatusCodes.NotFound, error);
+            throw new HueError(message || "Not found", StatusCodes.NotFound, error);
           default:
-            throw new HueError(`API error: ${status}`, StatusCodes.ServerError, error);
+            throw new HueError(message || `API error: ${status}`, StatusCodes.ServerError, error);
         }
       } else if (error.request) {
         log.error("Philips Hue API request error (%s %s) %s: %s", method, endpoint, error.code, error.message);
@@ -111,6 +121,9 @@ class HueApi implements ResourceApi {
    * @throws {HueError} If the request fails.
    */
   async getHubConfig() {
+    if (!this.hubUrl) {
+      throw new HueError("Hub URL is required", StatusCodes.ServiceUnavailable);
+    }
     // TODO verify if new Hue pro hub still allows http access
     const hubHttp = this.hubUrl.replace("https://", "http://");
     try {
@@ -129,6 +142,9 @@ class HueApi implements ResourceApi {
    * @throws {HueError} If the request fails or key generation is unsuccessful.
    */
   async generateAuthKey(deviceType: string): Promise<AuthenticateSuccess> {
+    if (!this.hubUrl) {
+      throw new HueError("Failed to generate auth key: Hub URL is required", StatusCodes.ServiceUnavailable);
+    }
     try {
       const { data } = await this.axiosInstance.post<AuthenticateResult[]>(`${this.hubUrl}/api`, {
         devicetype: deviceType,
@@ -146,21 +162,94 @@ class HueApi implements ResourceApi {
     }
   }
 
-  async sendRequest<T>(method: "GET" | "POST" | "PUT", endpoint: string, body?: unknown): Promise<T> {
+  async sendRequest<T>(
+    method: "GET" | "POST" | "PUT",
+    endpoint: string,
+    body?: unknown,
+    authRequired: boolean = true
+  ): Promise<T> {
     log.msgTrace("Philips Hue API request: %s %s", method, endpoint);
-    if (!this.axiosInstance.defaults.headers.common["hue-application-key"]) {
+    if (authRequired && !this.axiosInstance.defaults.headers.common["hue-application-key"]) {
       throw new HueError("auth key is required in protected resource", StatusCodes.Unauthorized);
     }
     try {
       const { data } = await this.axiosInstance.request<T>({
         method,
         url: endpoint,
-        data: body,
-        timeout: this.requestTimeout
+        data: body
       });
+
+      // Check for V2 API errors in the response body (even if status is 2xx)
+      if (
+        data &&
+        typeof data === "object" &&
+        !Array.isArray(data) &&
+        "errors" in data &&
+        Array.isArray(data.errors) &&
+        data.errors.length > 0
+      ) {
+        const firstError = data.errors[0];
+        const message = typeof firstError === "string" ? firstError : firstError.description || "Unknown API error";
+        throw new HueError(message, StatusCodes.ServerError);
+      }
+
       return data;
     } catch (error: unknown) {
+      if (error instanceof HueError) {
+        throw error;
+      }
       this.handleError(error, method, endpoint);
+    }
+  }
+
+  /**
+   * Check if there is a bridge alive on given ip and return bridge ID.
+   *
+   * @returns The bridge ID.
+   * @throws {HueError} If the bridge cannot be reached or returns an invalid response.
+   */
+  async is_hue_bridge(): Promise<string> {
+    if (!this.hubUrl) {
+      throw new HueError("Hub URL is required", StatusCodes.ServiceUnavailable);
+    }
+    // every hue bridge returns discovery info on this endpoint
+    const hubHttp = this.hubUrl.replace("https://", "http://");
+    const endpoint = `${hubHttp}/api/config`;
+    try {
+      const data = await this.sendRequest<HubConfig>("GET", endpoint, undefined, false);
+      if (!data.bridgeid) {
+        throw new HueError("Invalid API response, not a real Hue bridge?", StatusCodes.ServiceUnavailable);
+      }
+      return normalizeBridgeId(data.bridgeid);
+    } catch (error) {
+      if (error instanceof HueError) {
+        throw error;
+      }
+      throw new HueError("Failed to check if it is a Hue bridge", StatusCodes.ServiceUnavailable, error);
+    }
+  }
+
+  /**
+   * Check if the bridge has support for the new V2 api.
+   *
+   * @returns True if the bridge supports V2 API, false otherwise.
+   */
+  async is_v2_bridge(): Promise<boolean> {
+    if (!this.hubUrl) {
+      return false;
+    }
+    try {
+      // v2 api is https only and returns a 403 forbidden when no key provided
+      await this.sendRequest("GET", "/clip/v2/resource", undefined, false);
+      return false;
+    } catch (error) {
+      // all other status/exceptions means the bridge is not v2 or not reachable at this time
+      if (error instanceof HueError && error.statusCode === StatusCodes.Unauthorized) {
+        if (axios.isAxiosError(error.cause) && error.cause.response?.status === 403) {
+          return true;
+        }
+      }
+      return false;
     }
   }
 }

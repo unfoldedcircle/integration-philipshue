@@ -7,6 +7,18 @@
 
 import PhilipsHue from "./lib/philips-hue.js";
 import log from "./log.js";
+import i18n from "i18n";
+import path from "path";
+
+// Node.js 20.11 / 21.2
+const __dirname = import.meta.dirname;
+
+i18n.configure({
+  locales: ["en", "de", "fr"],
+  defaultLocale: "en",
+  directory: path.join(__dirname, "..", "locales"),
+  objectNotation: true
+});
 
 const philipsHue = new PhilipsHue();
 philipsHue.init().catch((error: unknown) => {

@@ -8,6 +8,7 @@
 import { LightFeatures } from "@unfoldedcircle/integration-api";
 import fs from "fs";
 import { LightResource } from "./lib/hue-api/types.js";
+import i18n from "i18n";
 import log from "./log.js";
 
 export function convertImageToBase64(file: string) {
@@ -65,7 +66,7 @@ export function convertXYtoHSV(x: number, y: number, lightness = 1) {
     H = 60 * ((R - G) / (V - minRGB)) + 240;
   }
 
-  let ScaledS = Math.round(S * 255);
+  const ScaledS = Math.round(S * 255);
 
   const res = {
     hue: Math.round(H) % 360,
@@ -110,8 +111,31 @@ export function convertHSVtoXY(hue: number, saturation: number, value: number) {
   };
 }
 
-export function getHubUrl(ip: string) {
-  return "https://" + ip;
+export function getHubUrl(ip: string): string {
+  // best effort: even though the parameter should only be an IP or hostname, we try to parse URL's
+  // Note: the `URL` class isn't a very good validator!
+  const address =
+    "https://" +
+    ip
+      .toLowerCase()
+      .trim()
+      .replace(/^https?:\/\//, "");
+
+  if (!isValidHttpUrl(address)) {
+    throw new Error("Invalid hub URL: " + address);
+  }
+
+  const url = new URL(address);
+  return url.protocol + "//" + url.host;
+}
+
+export function isValidHttpUrl(url: string): boolean {
+  try {
+    const newUrl = new URL(url);
+    return newUrl.protocol === "http:" || newUrl.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 export function mirekToColorTemp(colorTemp: number) {
@@ -137,4 +161,66 @@ export function brightnessToPercent(brightness: number) {
 
 export function percentToBrightness(percent: number) {
   return Math.max(1, Math.round((percent / 100) * 255));
+}
+
+/**
+ * Normalize a bridge ID.
+ *
+ * Logic from aiohue library.
+ *
+ * @param bridgeId The bridge ID to normalize.
+ * @returns The normalized bridge ID.
+ */
+export function normalizeBridgeId(bridgeId: string): string {
+  const id = bridgeId.toLowerCase();
+
+  // zeroconf: properties['id'], field contains semicolons after each 2 char
+  if (id.length === 17 && (id.match(/:/g) || []).length === 5) {
+    return id.replace(/:/g, "");
+  }
+
+  // nupnp: contains 4 extra characters in the middle: "fffe"
+  if (id.length === 16 && id.substring(6, 10) === "fffe") {
+    return id.substring(0, 6) + id.substring(10);
+  }
+
+  // SSDP/UPNP and Hue Bridge API contains right ID.
+  if (id.length === 12) {
+    return id;
+  }
+
+  log.warn("Received unexpected bridge id: %s", bridgeId);
+
+  return id;
+}
+
+/**
+ * Returns an object of translations for a given phrase in each language.
+ *
+ * - The `i18n.__h` hashed list of translations is converted to an object with key values.
+ *   - __h result for a given key: `[{en: "foo"},{de: "bar"}]`
+ *   - Output: `{en: "foo", de: "bar"}`
+ * - If a translation text is the same as the key, it is considered "untranslated" and skipped in the output.
+ *   - __h result for given key `key42`: `[{en: "foo"},{de: "key42"},{fr: "key42"}]`
+ *   - Output: `{en: "foo"}`
+ * - If there are no translations, the english key is returned as value.
+ *   - __h result for a given key: `[]`
+ *   - Output: `{en: "${key}"}`
+ *
+ * @param key translation key
+ * @return object containing translations for each language
+ */
+export function i18all(key: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  i18n.__h(key).forEach((item) => {
+    const lang = Object.keys(item)[0];
+    // skip untranslated keys
+    if (key !== item[lang]) {
+      out[lang] = item[lang];
+    }
+  });
+  if (Object.keys(out).length === 0) {
+    out.en = key;
+  }
+  return out;
 }
