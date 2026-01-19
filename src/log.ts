@@ -10,11 +10,11 @@
 import debugModule from "debug";
 
 const log = {
-  msgTrace: debugModule("philips-hue:msg"),
-  debug: debugModule("philips-hue:debug"),
-  info: debugModule("philips-hue:info"),
-  warn: debugModule("philips-hue:warn"),
-  error: debugModule("philips-hue:error")
+  msgTrace: debugModule("uc_hue:msg"),
+  debug: debugModule("uc_hue:debug"),
+  info: debugModule("uc_hue:info"),
+  warn: debugModule("uc_hue:warn"),
+  error: debugModule("uc_hue:error")
 };
 
 export default log;

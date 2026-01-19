@@ -9,7 +9,10 @@ The integration implements the UC Remote [Integration-API](https://github.com/un
 communicates with JSON messages over WebSocket.
 
 > [!IMPORTANT]
-> Compatibility with the new Hue Bridge Pro has not yet been tested.
+> This driver is currently being rewritten using the Hue API v2 with event streaming.
+>
+> - v1 Hue hubs are no longer supported.
+> - Compatibility with the new Hue Bridge Pro has not yet been tested.
 
 ## Standalone usage
 
@@ -40,75 +43,35 @@ UC_CONFIG_HOME=. UC_INTEGRATION_HTTP_PORT=8097 npm run start
 
 The configuration files are loaded and saved from the path specified in the environment variable `UC_CONFIG_HOME`.
 
-### Configuration
+### Logging
 
-Fill out the configuration options in `driver.json`, especially `port` and `driver_url`.
+Logging any kind of output is directed to the [debug](https://www.npmjs.com/package/debug) module.
+To let the integration driver output anything, run the driver with the `DEBUG` environment variable set like:
 
-You need to manually register the driver and create an integration in the core:
-
----
-
-The driver uses discovery for Philips Hue. These will be available for the core to set up.
-
-To register the integration, send via websockets:
-
-```
-{
-    "kind": "req",
-    "id": 3,
-    "msg": "register_integration_driver",
-    "msg_data": {
-        "driver_id": "uc_node_philipshue_driver",
-        "name": {
-            "en": "Philips Hue Integration"
-        },
-        "driver_url": "ws://localhost:8097",
-        "version": "0.0.1",
-        "enabled": true,
-        "description": {
-            "en": "Control your Philips Hue lights with Remote Two/3."
-        },
-        "developer": {
-		"name": "Unfolded Circle",
-		"email": "support@unfoldedcircle.com",
-		"url": "https://www.unfoldedcircle.com/support"
-        },
-        "home_page": "https://www.unfoldedcircle.com",
-        "release_date": "2022-07-24",
-        "device_discovery": false
-    }
-}
+```shell
+DEBUG=uc_hue:* npm run start
 ```
 
-Create an integration:
+The driver exposes the following log-levels:
 
-```
-{
-    "kind": "req",
-    "id": 4,
-    "msg": "create_integration",
-    "msg_data": {
-        "driver_id": "uc_node_philipshue_driver",
-        "name": {
-            "en": "Philips Hue Integration"
-        },
-        "enabled": true
-    }
-}
+Log namespaces:
+
+- `uc_hue:msg`: Philips Hue API messages
+- `uc_hue:debug`: debugging messages
+- `uc_hue:info`: informational messages
+- `uc_hue:warn`: warnings
+- `uc_hue:error`: errors
+
+If you only want to get errors and warnings reported:
+
+```shell
+DEBUG=uc_hue:warn,uc_hue:error npm run start
 ```
 
-Delete:
+The [Unfolded Circle Integration-API library](https://github.com/unfoldedcircle/integration-node-library) is also using
+the `debug` module for logging:
 
-```
-{
-    "kind": "req",
-    "id": 5,
-    "msg": "delete_integration_driver",
-    "msg_data": {
-        "driver_id": "uc_node_philipshue_driver"
-    }
-}
-```
+- Enable WebSocket message trace: `ucapi:msg`
 
 ## Versioning
 
