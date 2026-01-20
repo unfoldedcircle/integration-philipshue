@@ -100,10 +100,13 @@ class PhilipsHue {
   }
 
   private async onCfgChange(_bridgeId: string) {
-    const hubCfg = this.config.getHubConfig();
-
     this.eventStream.disconnect();
+
+    const hubCfg = this.config.getHubConfig();
     if (hubCfg) {
+      // set new credentials
+      this.hueApi.setBaseUrl(getHubUrl(hubCfg.ip));
+      this.hueApi.setAuthKey(hubCfg.username);
       this.eventStream.connect(getHubUrl(hubCfg.ip), hubCfg.username);
     }
   }
@@ -111,6 +114,9 @@ class PhilipsHue {
   private async onCfgRemove(_bridgeId?: string) {
     this.eventStream.disconnect();
     this.updateEntityStates(LightStates.Unavailable);
+    // removing entities with a single bridge is easy
+    this.uc.clearConfiguredEntities();
+    this.uc.clearAvailableEntities();
   }
 
   // terri: check if you can simplify since
@@ -254,6 +260,7 @@ class PhilipsHue {
         //       States are updated once the event stream is re-connected.
         //       But this might be rather slow, especially if the stream is still connected if an error occurs here!
         // TODO is UNAVAILABLE the correct state? The light cannot be controlled anymore until it sends an update!
+        //      Maybe check status code? Only set to Unavailable for 401 (invalid auth key)
         this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
           [LightAttributes.State]: LightStates.Unavailable
         });

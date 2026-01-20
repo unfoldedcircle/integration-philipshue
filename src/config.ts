@@ -86,7 +86,7 @@ class Config extends EventEmitter {
 
   public removeHub() {
     const bridgeId = this.config.hub?.bridgeId;
-    this.config.hub = undefined;
+    this.config = { lights: {} };
     this.saveToFile();
     if (bridgeId) {
       this.emit("remove", bridgeId);
