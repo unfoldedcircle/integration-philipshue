@@ -241,7 +241,9 @@ class PhilipsHue {
         this.config.updateLight(entityId, { name: light.metadata.name, features: lightFeatures });
         await this.syncLightState(entityId, light);
       } catch (error: unknown) {
+        let statusCode = 0;
         if (error instanceof HueError) {
+          statusCode = error.statusCode;
           log.error(
             "Failed to update light %s: %s %s (%s)",
             entityId,
@@ -259,10 +261,10 @@ class PhilipsHue {
         // Note: a polling feature might be required to check the Hub's connection state.
         //       States are updated once the event stream is re-connected.
         //       But this might be rather slow, especially if the stream is still connected if an error occurs here!
-        // TODO is UNAVAILABLE the correct state? The light cannot be controlled anymore until it sends an update!
-        //      Maybe check status code? Only set to Unavailable for 401 (invalid auth key)
+        // Only set entity to Unavailable for missing or invalid authentication key errors.
+        const state = statusCode === 401 || statusCode === 403 ? LightStates.Unavailable : LightStates.Unknown;
         this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
-          [LightAttributes.State]: LightStates.Unavailable
+          [LightAttributes.State]: state
         });
       }
     }
