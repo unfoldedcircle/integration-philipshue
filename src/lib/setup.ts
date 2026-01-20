@@ -55,7 +55,7 @@ class PhilipsHueSetup {
 
   constructor(config: Config) {
     this.bonjour = new Bonjour();
-    this.hueApi = new HueApi("");
+    this.hueApi = new HueApi();
     this.config = config;
   }
 
