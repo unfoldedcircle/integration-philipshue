@@ -9,6 +9,7 @@ import { LightFeatures } from "@unfoldedcircle/integration-api";
 import EventEmitter from "node:events";
 import fs from "fs";
 import path from "path";
+import log from "./log.js";
 
 const CFG_FILENAME = "philips_hue_config.json";
 
@@ -101,16 +102,25 @@ class Config extends EventEmitter {
 
   private loadFromFile() {
     if (fs.existsSync(this.configPath)) {
-      const data = fs.readFileSync(this.configPath, "utf-8");
-      this.config = JSON.parse(data);
+      try {
+        const data = fs.readFileSync(this.configPath, "utf-8");
+        this.config = JSON.parse(data);
+      } catch (e) {
+        log.error(`Error loading configuration from ${this.configPath}: ${e}`);
+        // keep default config or what was already loaded
+      }
     } else {
       this.saveToFile();
     }
   }
 
   private saveToFile() {
-    const data = JSON.stringify(this.config, null, 2);
-    fs.writeFileSync(this.configPath, data, "utf-8");
+    try {
+      const data = JSON.stringify(this.config, null, 2);
+      fs.writeFileSync(this.configPath, data, "utf-8");
+    } catch (e) {
+      log.error(`Error saving configuration to ${this.configPath}: ${e}`);
+    }
   }
 }
 
