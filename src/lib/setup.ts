@@ -24,6 +24,7 @@ import HueApi from "./hue-api/api.js";
 import { LightResource } from "./hue-api/types.js";
 import os from "os";
 import * as uc from "@unfoldedcircle/integration-api";
+import net from "net";
 
 /**
  * Enumeration of setup steps to keep track of user data responses.
@@ -362,15 +363,19 @@ class PhilipsHueSetup {
       log.info("Starting mDNS discovery of Hue hubs on the network");
 
       this.bonjour.find({ type: "hue" }, (service) => {
-        // TODO verify if this is the correct address
-        if (!service.referer?.address) {
+        if (!service.addresses) {
           log.warn("Hue bridge discovery: no address found", service.host);
           return;
         }
 
+        // Prefer IPv4
+        const sortedAddresses = service.addresses.slice().sort((a, b) => {
+          return (net.isIPv4(b) ? 1 : 0) - (net.isIPv4(a) ? 1 : 0);
+        });
+
         const hub: HueHub = {
           id: service.host,
-          ip: service.referer?.address,
+          ip: sortedAddresses[0],
           name: service.name
         };
         this.hubs.push(hub);

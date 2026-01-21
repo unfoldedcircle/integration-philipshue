@@ -148,7 +148,7 @@ class HueApi implements ResourceApi {
       throw new HueError("Failed to generate auth key: Hub URL is required", StatusCodes.ServiceUnavailable);
     }
     try {
-      const { data } = await this.axiosInstance.post<AuthenticateResult[]>(`${this.hubUrl}/api`, {
+      const { data } = await this.axiosInstance.post<AuthenticateResult[]>(`/api`, {
         devicetype: deviceType,
         generateclientkey: true
       });
