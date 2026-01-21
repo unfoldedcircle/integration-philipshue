@@ -19,6 +19,7 @@ _Changes in the next release_
 - Open Source release ([#20](https://github.com/unfoldedcircle/integration-philipshue/issues/20)).
 - Node.js v22.13 and package updates ([#31](https://github.com/unfoldedcircle/integration-philipshue/pull/31)).
 - Logging prefixes ([#40](https://github.com/unfoldedcircle/integration-philipshue/pull/40)).
+- Add retry handling for rate limiting and service unavailable errors ([#43](https://github.com/unfoldedcircle/integration-philipshue/issues/43)).
 
 ### Fixed
 
@@ -26,6 +27,7 @@ _Changes in the next release_
 - Command error propagation and improve entity state handling ([#36](https://github.com/unfoldedcircle/integration-philipshue/pull/36)).
 - Emit hub configuration change events ([#41](https://github.com/unfoldedcircle/integration-philipshue/pull/41)).
 - Only set entity state to unavailable for auth errors ([#42](https://github.com/unfoldedcircle/integration-philipshue/pull/42)).
+- Properly handle entity subscribe and unsubscribe events ([#44](https://github.com/unfoldedcircle/integration-philipshue/pull/44)).
 
 ---
 
