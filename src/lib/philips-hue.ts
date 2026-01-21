@@ -199,17 +199,26 @@ class PhilipsHue {
     }
   }
 
-  private async handleSubscribeEntities() {
-    // TODO verify command: entity IDs parameter seems missing!
+  private async handleSubscribeEntities(ids: string[]) {
     const hubConfig = this.config.getHubConfig();
+
     if (hubConfig && hubConfig.ip) {
+      // manually fetch the current light states and send entity updates
+      for (const id of ids) {
+        await this.updateLight(id);
+      }
+      // make sure the event stream is connected
       this.eventStream.connect(getHubUrl(hubConfig.ip), hubConfig.username);
+    } else {
+      this.updateEntityStates(LightStates.Unavailable);
     }
   }
 
-  private async handleUnsubscribeEntities() {
-    // TODO verify command: entity IDs parameter seems missing!
-    this.eventStream.disconnect();
+  private async handleUnsubscribeEntities(_ids: string[]) {
+    // Note: the node library needs more methods to check avail / configured entities
+    if (this.uc.getConfiguredEntities().getEntities().length === 0) {
+      this.eventStream.disconnect();
+    }
   }
 
   private async handleDisconnect() {
@@ -234,41 +243,49 @@ class PhilipsHue {
   private async updateLights() {
     for (const entity of this.uc.getConfiguredEntities().getEntities()) {
       const entityId = entity.entity_id as string;
-      try {
-        const light = await this.hueApi.lightResource.getLight(entityId);
-
-        const lightFeatures = getLightFeatures(light);
-        this.config.updateLight(entityId, { name: light.metadata.name, features: lightFeatures });
-        await this.syncLightState(entityId, light);
-      } catch (error: unknown) {
-        let statusCode = 0;
-        if (error instanceof HueError) {
-          statusCode = error.statusCode;
-          log.error(
-            "Failed to update light %s: %s %s (%s)",
-            entityId,
-            error.statusCode,
-            error.message,
-            // @ts-expect-error best effort logging
-            error.cause?.message ? error.cause?.message : ""
-          );
-        } else {
-          log.error("Failed to update light %s: %s", entityId, error);
-        }
-
-        // TODO probably best to define a max error limit: e.g. abort after 3-5 failed requests
-
-        // Note: a polling feature might be required to check the Hub's connection state.
-        //       States are updated once the event stream is re-connected.
-        //       But this might be rather slow, especially if the stream is still connected if an error occurs here!
-        // Only set entity to Unavailable for missing or invalid authentication key errors.
-        const state = statusCode === 401 || statusCode === 403 ? LightStates.Unavailable : LightStates.Unknown;
-        this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
-          [LightAttributes.State]: state
-        });
-      }
+      await this.updateLight(entityId);
     }
     // TODO if an error occurred while updating lights: perform a manual connectivity test and set entity states
+  }
+
+  private async updateLight(entityId: string): Promise<boolean> {
+    try {
+      const light = await this.hueApi.lightResource.getLight(entityId);
+
+      const lightFeatures = getLightFeatures(light);
+      this.config.updateLight(entityId, { name: light.metadata.name, features: lightFeatures });
+      await this.syncLightState(entityId, light);
+
+      return true;
+    } catch (error: unknown) {
+      let statusCode = 0;
+      if (error instanceof HueError) {
+        statusCode = error.statusCode;
+        log.error(
+          "Failed to update light %s: %s %s (%s)",
+          entityId,
+          error.statusCode,
+          error.message,
+          // @ts-expect-error best effort logging
+          error.cause?.message ? error.cause?.message : ""
+        );
+      } else {
+        log.error("Failed to update light %s: %s", entityId, error);
+      }
+
+      // TODO probably best to define a max error limit: e.g. abort after 3-5 failed requests
+
+      // Note: a polling feature might be required to check the Hub's connection state.
+      //       States are updated once the event stream is re-connected.
+      //       But this might be rather slow, especially if the stream is still connected if an error occurs here!
+      // Only set entity to Unavailable for missing or invalid authentication key errors.
+      const state = statusCode === 401 || statusCode === 403 ? LightStates.Unavailable : LightStates.Unknown;
+      this.uc.getConfiguredEntities().updateEntityAttributes(entityId, {
+        [LightAttributes.State]: state
+      });
+
+      return false;
+    }
   }
 
   private async syncLightState(entityId: string, light: Partial<LightResource>) {
