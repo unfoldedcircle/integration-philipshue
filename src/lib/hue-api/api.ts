@@ -9,9 +9,11 @@ import axios, { AxiosInstance } from "axios";
 import https from "node:https";
 import { StatusCodes } from "@unfoldedcircle/integration-api";
 import log from "../../log.js";
-import { normalizeBridgeId } from "../../util.js";
+import { delay, normalizeBridgeId } from "../../util.js";
 import LightResource from "./light-resource.js";
 import { AuthenticateResult, AuthenticateSuccess, HubConfig } from "./types.js";
+
+const MAX_RETRIES = 3;
 
 export class HueError extends Error {
   constructor(
@@ -162,6 +164,16 @@ class HueApi implements ResourceApi {
     }
   }
 
+  /**
+   * Sends an HTTP request to the Philips Hue API with support for retries on certain error statuses.
+   *
+   * @param method - The HTTP method to use for the request.
+   * @param endpoint - The API endpoint to be called.
+   * @param [body] - The optional body payload for the request (for POST or PUT methods).
+   * @param [authRequired=true] - Indicates whether the request requires authentication.
+   * @return A promise that resolves to the parsed response data of type `T` if the request is successful.
+   * @throws {HueError} Throws an error if authentication fails, the API returns an error, or retries are exhausted.
+   */
   async sendRequest<T>(
     method: "GET" | "POST" | "PUT",
     endpoint: string,
@@ -172,34 +184,63 @@ class HueApi implements ResourceApi {
     if (authRequired && !this.axiosInstance.defaults.headers.common["hue-application-key"]) {
       throw new HueError("auth key is required in protected resource", StatusCodes.Unauthorized);
     }
-    try {
-      const { data } = await this.axiosInstance.request<T>({
-        method,
-        url: endpoint,
-        data: body
-      });
 
-      // Check for V2 API errors in the response body (even if status is 2xx)
-      if (
-        data &&
-        typeof data === "object" &&
-        !Array.isArray(data) &&
-        "errors" in data &&
-        Array.isArray(data.errors) &&
-        data.errors.length > 0
-      ) {
-        const firstError = data.errors[0];
-        const message = typeof firstError === "string" ? firstError : firstError.description || "Unknown API error";
-        throw new HueError(message, StatusCodes.ServerError);
+    // The bridge will deny more than 3 requests at the same time with a 429 error.
+    // The Python aiohue library also mentions 503 if the hub is overloaded.
+    // These error codes are automatically retried.
+    let retries = 0;
+    let statusCode = 0;
+    while (retries < MAX_RETRIES) {
+      retries++;
+
+      if (retries > 1) {
+        const retryWaitMs = 250 * (retries - 1);
+        log.debug("Got %d error from Hue bridge, retry request #%d in %d ms", statusCode, retries, retryWaitMs);
+        await delay(retryWaitMs);
       }
 
-      return data;
-    } catch (error: unknown) {
-      if (error instanceof HueError) {
-        throw error;
+      try {
+        const { data } = await this.axiosInstance.request<T>({
+          method,
+          url: endpoint,
+          data: body
+        });
+
+        // Check for V2 API errors in the response body (even if status is 2xx)
+        if (
+          data &&
+          typeof data === "object" &&
+          !Array.isArray(data) &&
+          "errors" in data &&
+          Array.isArray(data.errors) &&
+          data.errors.length > 0
+        ) {
+          const firstError = data.errors[0];
+          const message = typeof firstError === "string" ? firstError : firstError.description || "Unknown API error";
+          throw new HueError(message, StatusCodes.ServerError);
+        }
+
+        return data;
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error) && error.response) {
+          statusCode = error.response.status;
+          // Retry on 429 (Rate Limit) or 503 (Service Unavailable)
+          if ((statusCode === 429 || statusCode === 503) && retries < MAX_RETRIES) {
+            continue;
+          }
+        }
+
+        if (error instanceof HueError) {
+          throw error;
+        }
+        this.handleError(error, method, endpoint);
       }
-      this.handleError(error, method, endpoint);
     }
+
+    throw new HueError(
+      `${retries} requests to the bridge failed, it is probably overloaded. Giving up.`,
+      StatusCodes.ServiceUnavailable
+    );
   }
 
   /**
