@@ -69,7 +69,8 @@ class PhilipsHueSetup {
    * @return the setup action on how to continue
    */
   async handleSetup(msg: SetupDriver): Promise<SetupAction> {
-    if (this.setupStep === SetupSteps.COMPLETED) {
+    if (msg instanceof uc.AbortDriverSetup) {
+      log.info("Setup was aborted with code: %s", msg.error);
       this.setupStep = SetupSteps.INIT;
       return new SetupComplete();
     }
@@ -77,8 +78,18 @@ class PhilipsHueSetup {
     if (msg instanceof DriverSetupRequest) {
       this.setupStep = SetupSteps.INIT;
       this.cfgAddDevice = false;
+      this.manualAddress = false;
+      this.hubs = [];
+      this.selectedHub = null;
       return await this.handleDriverSetup(msg);
-    } else if (msg instanceof UserConfirmationResponse) {
+    }
+
+    if (this.setupStep === SetupSteps.COMPLETED) {
+      this.setupStep = SetupSteps.INIT;
+      return new SetupComplete();
+    }
+
+    if (msg instanceof UserConfirmationResponse) {
       if (this.setupStep === SetupSteps.DISCOVER) {
         log.debug("Received user confirmation for starting discovery again");
         return await this.handleHubDiscovery(msg);
@@ -86,7 +97,10 @@ class PhilipsHueSetup {
         return await this.handleUserConfirmationResponse(msg);
       }
       log.error("No or invalid user confirmation response was received in step %d: %s", this.setupStep, msg);
-    } else if (msg instanceof UserDataResponse) {
+      return new SetupError(uc.IntegrationSetupError.Other);
+    }
+
+    if (msg instanceof UserDataResponse) {
       if (this.setupStep === SetupSteps.CONFIGURATION_MODE && "action" in msg.inputValues) {
         return await this.handleConfigurationMode(msg);
       }
@@ -97,13 +111,11 @@ class PhilipsHueSetup {
         return await this.handleUserDataResponse(msg);
       }
       log.error("No or invalid user response was received in step %d: %s", this.setupStep, msg);
-    } else if (msg instanceof uc.AbortDriverSetup) {
-      log.info("Setup was aborted with code: %s", msg.error);
-      this.hubs = [];
-      this.setupStep = SetupSteps.INIT;
+      return new SetupError(uc.IntegrationSetupError.Other);
     }
 
-    return new SetupComplete();
+    log.error("Unhandled setup request in step %d: %s", this.setupStep, msg);
+    return new SetupError(uc.IntegrationSetupError.Other);
   }
 
   /**
