@@ -19,18 +19,8 @@ import {
 import { Bonjour } from "bonjour-service";
 import Config from "../config.js";
 import log from "../log.js";
-import {
-  convertImageToBase64,
-  delay,
-  getHubUrl,
-  getLightFeatures,
-  getGroupFeatures,
-  i18all,
-  getMostCommonGamut,
-  getMinMaxMirek
-} from "../util.js";
+import { addAvailableLights, addAvailableGroups, convertImageToBase64, delay, getHubUrl, i18all } from "../util.js";
 import HueApi from "./hue-api/api.js";
-import { LightResource, GroupType, CombinedGroupResource } from "./hue-api/types.js";
 import os from "os";
 import * as uc from "@unfoldedcircle/integration-api";
 import net from "net";
@@ -304,16 +294,16 @@ class PhilipsHueSetup {
           bridgeId: this.selectedHub.id
         });
         const lightData = await this.hueApi.lightResource.getLights();
-        this.addAvailableLights(lightData);
+        addAvailableLights(lightData, this.config);
 
         const roomData = await this.hueApi.groupResource.getGroupResources("room");
         if (roomData.length > 0) {
-          this.addAvailableGroups(roomData, "room");
+          addAvailableGroups(roomData, "room", this.config);
         }
 
         const zoneData = await this.hueApi.groupResource.getGroupResources("zone");
         if (zoneData.length > 0) {
-          this.addAvailableGroups(zoneData, "zone");
+          addAvailableGroups(zoneData, "zone", this.config);
         }
 
         return new SetupComplete();
@@ -349,33 +339,6 @@ class PhilipsHueSetup {
       img,
       i18all("setup.confirmation.footer")
     );
-  }
-
-  private addAvailableLights(lights: LightResource[]) {
-    lights.forEach((light) => {
-      const features = getLightFeatures(light);
-      this.config.addLight(light.id, {
-        name: light.metadata.name,
-        features,
-        gamut_type: light.color?.gamut_type,
-        mirek_schema: light.color_temperature?.mirek_schema
-      });
-    });
-  }
-
-  private addAvailableGroups(groups: CombinedGroupResource[], groupType: GroupType) {
-    groups.forEach((group) => {
-      const features = getGroupFeatures(group);
-      this.config.addLight(group.id, {
-        name: group.metadata.name,
-        features,
-        groupedLightIds: group.grouped_lights.map((gl) => gl.id),
-        childLightIds: group.lights.map((light) => light.id),
-        groupType,
-        gamut_type: getMostCommonGamut(group),
-        mirek_schema: getMinMaxMirek(group)
-      });
-    });
   }
 
   private async handleHubDiscovery(

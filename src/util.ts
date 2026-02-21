@@ -7,9 +7,10 @@
 
 import { LightFeatures } from "@unfoldedcircle/integration-api";
 import fs from "fs";
-import { CombinedGroupResource, GamutType, LightResource } from "./lib/hue-api/types.js";
+import { CombinedGroupResource, GamutType, GroupType, LightResource } from "./lib/hue-api/types.js";
 import i18n from "i18n";
 import log from "./log.js";
+import Config from "./config.js";
 
 export function convertImageToBase64(file: string) {
   let data;
@@ -24,6 +25,41 @@ export function convertImageToBase64(file: string) {
 
 export function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export function addAvailableLights(lights: LightResource[], config: Config) {
+  lights.forEach((light) => {
+    if (config.getLight(light.id)) {
+      log.info("Light with id %s already exists in config, skipping", light.id);
+      return;
+    }
+    const features = getLightFeatures(light);
+    config.addLight(light.id, {
+      name: light.metadata.name,
+      features,
+      gamut_type: light.color?.gamut_type,
+      mirek_schema: light.color_temperature?.mirek_schema
+    });
+  });
+}
+
+export function addAvailableGroups(groups: CombinedGroupResource[], groupType: GroupType, config: Config) {
+  groups.forEach((group) => {
+    if (config.getLight(group.id)) {
+      log.info("Group with id %s already exists in config, skipping", group.id);
+      return;
+    }
+    const features = getGroupFeatures(group);
+    config.addLight(group.id, {
+      name: group.metadata.name,
+      features,
+      groupedLightIds: group.grouped_lights.map((gl) => gl.id),
+      childLightIds: group.lights.map((light) => light.id),
+      groupType,
+      gamut_type: getMostCommonGamut(group),
+      mirek_schema: getMinMaxMirek(group)
+    });
+  });
 }
 
 export function getLightFeatures(light: LightResource): LightFeatures[] {

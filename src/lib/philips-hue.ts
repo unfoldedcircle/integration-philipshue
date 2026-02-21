@@ -19,6 +19,8 @@ import {
 import Config, { ConfigEvent, GroupConfig, LightOrGroupConfig } from "../config.js";
 import log from "../log.js";
 import {
+  addAvailableGroups,
+  addAvailableLights,
   brightnessToPercent,
   colorTempToMirek,
   convertHSVtoXY,
@@ -110,6 +112,8 @@ class PhilipsHue {
   private setupEventStreamEvents() {
     const hubConfig = this.config.getHubConfig();
     this.eventStream.on("update", this.handleEventStreamUpdate.bind(this));
+    this.eventStream.on("add", this.handleEventStreamAdd.bind(this));
+    this.eventStream.on("delete", this.handleEventStreamDelete.bind(this));
     this.eventStream.on("connected", async () => {
       log.info("Event stream connected, updating lights");
       this.updateLights().catch((error) => log.error("Updating lights after event stream connection failed:", error));
@@ -306,6 +310,38 @@ class PhilipsHue {
         }
       }
     }
+  }
+
+  private async handleEventStreamAdd(event: HueEvent) {
+    for (const data of event.data) {
+      switch (data.type) {
+        case "light": {
+          const light = await this.hueApi.lightResource.getLight(data.id);
+          addAvailableLights([light], this.config);
+          break;
+        }
+        case "room":
+        case "zone":
+          {
+            const groupData = await this.hueApi.groupResource.getGroupResources(data.type);
+            if (groupData.length > 0) {
+              addAvailableGroups(groupData, data.type, this.config);
+            }
+          }
+          break;
+      }
+    }
+  }
+
+  private handleEventStreamDelete(event: HueEvent) {
+    const configured = this.uc.getConfiguredEntities();
+    for (const data of event.data) {
+      configured.updateEntityAttributes(data.id, {
+        [LightAttributes.State]: LightStates.Unavailable
+      });
+      this.config.removeLight(data.id);
+    }
+    this.updateEntityIndexes();
   }
 
   private async handleSubscribeEntities(ids: string[]) {

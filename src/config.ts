@@ -91,6 +91,11 @@ class Config extends EventEmitter {
     this.saveToFile();
   }
 
+  public removeLight(id: string) {
+    delete this.config.lights[id];
+    this.saveToFile();
+  }
+
   public getLight(id: string): LightOrGroupConfig | undefined {
     return this.config.lights[id];
   }
