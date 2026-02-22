@@ -13,6 +13,7 @@ on:
       - "package-lock.json"
       - "driver.json"
       - "tsconfig.json"
+      - "tsconfig.build.json"
   pull_request:
     types: [opened, synchronize, reopened]
 
