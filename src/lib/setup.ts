@@ -56,15 +56,15 @@ class PhilipsHueSetup {
   private cfgAddDevice = false;
   private manualAddress = false;
   private bonjourFactory: () => Bonjour;
+  private hueApiFactory: (url?: string) => HueApi;
   private hubs: HueHub[] = [];
-  private hueApi: HueApi;
   private config: Config;
   private selectedHub: HueHub | null = null;
   private discoveryDelay = 4000;
 
   constructor(config: Config) {
     this.bonjourFactory = () => new Bonjour();
-    this.hueApi = new HueApi();
+    this.hueApiFactory = (url?: string) => new HueApi(url);
     this.config = config;
   }
 
@@ -219,9 +219,9 @@ class PhilipsHueSetup {
         let lightInfos;
         const hubCfg = this.config.getHubConfig();
         if (hubCfg && hubCfg.ip && hubCfg.username) {
+          const api = this.hueApiFactory(getHubUrl(hubCfg.ip));
           try {
-            this.hueApi.setBaseUrl(getHubUrl(hubCfg.ip));
-            const hubConfig = await this.hueApi.getHubConfig();
+            const hubConfig = await api.getHubConfig();
 
             /// text field has Markdown support
             hubInfos = { en: "```\n" + JSON.stringify(hubConfig, null, "  ") + "\n```" };
@@ -231,13 +231,12 @@ class PhilipsHueSetup {
 
           // perform a connection test with API key
           try {
-            this.hueApi.setAuthKey(hubCfg.username);
-            const data = await this.hueApi.lightResource.getLights();
+            api.setAuthKey(hubCfg.username);
+            const data = await api.lightResource.getLights();
             lightInfos = { en: "```\n" + JSON.stringify(data, null, "  ") + "\n```" };
           } catch (e) {
             lightInfos = { en: `**Error: ${e instanceof Error ? e.message : e}**` };
           }
-          this.hueApi.setAuthKey("");
         } else {
           hubInfos = i18all("setup.info.not_configured");
           lightInfos = i18all("setup.info.not_configured");
@@ -293,24 +292,24 @@ class PhilipsHueSetup {
   private async handleUserConfirmationResponse(msg: UserConfirmationResponse): Promise<SetupAction> {
     if (msg.confirm && this.selectedHub) {
       try {
-        this.hueApi.setBaseUrl(getHubUrl(this.selectedHub.ip));
-        const authKey = await this.hueApi.generateAuthKey("unfoldedcircle#" + os.hostname());
-        this.hueApi.setAuthKey(authKey.username);
+        const api = this.hueApiFactory(getHubUrl(this.selectedHub.ip));
+        const authKey = await api.generateAuthKey("unfoldedcircle#" + os.hostname());
+        api.setAuthKey(authKey.username);
         this.config.updateHubConfig({
           name: this.selectedHub.name,
           ip: this.selectedHub.ip,
           username: authKey.username,
           bridgeId: this.selectedHub.id
         });
-        const lightData = await this.hueApi.lightResource.getLights();
+        const lightData = await api.lightResource.getLights();
         addAvailableLights(lightData, this.config);
 
-        const roomData = await this.hueApi.groupResource.getGroupResources("room");
+        const roomData = await api.groupResource.getGroupResources("room");
         if (roomData.length > 0) {
           addAvailableGroups(roomData, "room", this.config);
         }
 
-        const zoneData = await this.hueApi.groupResource.getGroupResources("zone");
+        const zoneData = await api.groupResource.getGroupResources("zone");
         if (zoneData.length > 0) {
           addAvailableGroups(zoneData, "zone", this.config);
         }
@@ -362,8 +361,8 @@ class PhilipsHueSetup {
         log.debug("Starting manual hub setup for: %s", msg.inputValues.address);
         this.manualAddress = true;
         try {
-          this.hueApi.setBaseUrl(getHubUrl(msg.inputValues.address));
-          const hubConfig = await this.hueApi.getHubConfig();
+          const api = this.hueApiFactory(getHubUrl(msg.inputValues.address));
+          const hubConfig = await api.getHubConfig();
           const bridgeId = normalizeBridgeId(hubConfig.bridgeid);
 
           if (this.cfgAddDevice && this.config.getHubConfig()?.bridgeId === bridgeId) {
@@ -424,23 +423,27 @@ class PhilipsHueSetup {
         i18all("setup.discovery_failed.header")
       );
     } else {
-      const filteredHubs: HueHub[] = [];
-      for (const hub of this.hubs) {
-        try {
-          log.debug("Found hub %s: checking if it is a v2 bridge", hub.ip);
-          this.hueApi.setBaseUrl(getHubUrl(hub.ip));
-          const bridgeId = await this.hueApi.is_hue_bridge();
-          if (!(await this.hueApi.is_v2_bridge())) {
-            log.warn("Hub %s is not a v2 bridge, skipping", hub.ip);
-            continue;
-          }
-          // update hub.id with normalized bridge ID
-          hub.id = bridgeId;
-          filteredHubs.push(hub);
-        } catch (e) {
-          log.warn("Hub %s is either not a Hue bridge, or connection failed: %s", hub.ip, e);
-        }
-      }
+      const filteredHubs = (
+        await Promise.all(
+          this.hubs.map(async (hub) => {
+            try {
+              log.debug("Found hub %s: checking if it is a v2 bridge", hub.ip);
+              const api = this.hueApiFactory(getHubUrl(hub.ip));
+              const bridgeId = await api.is_hue_bridge();
+              if (await api.is_v2_bridge()) {
+                // update hub.id with normalized bridge ID
+                hub.id = bridgeId;
+                return hub;
+              } else {
+                log.warn("Hub %s is not a v2 bridge, skipping", hub.ip);
+              }
+            } catch (e) {
+              log.warn("Hub %s is either not a Hue bridge, or connection failed: %s", hub.ip, e);
+            }
+            return null;
+          })
+        )
+      ).filter((hub): hub is HueHub => hub !== null);
 
       log.info("Hue bridge discovery: found v2 hubs", filteredHubs);
 

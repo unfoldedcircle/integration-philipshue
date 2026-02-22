@@ -37,7 +37,7 @@ test("handleHubDiscovery should use normalized bridge ID for mDNS hubs", async (
     is_v2_bridge: async () => true
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (setup as any).hueApi = mockHueApi as unknown as HueApi;
+  (setup as any).hueApiFactory = () => mockHueApi as unknown as HueApi;
 
   const msg = new uc.DriverSetupRequest(false, {});
   // handleSetup with DriverSetupRequest(false) will call handleDriverSetup, which calls handleHubDiscovery
@@ -72,7 +72,7 @@ test("handleHubDiscovery should normalize bridge ID for manual setup", async (t)
     is_v2_bridge: async () => true
   };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  (setup as any).hueApi = mockHueApi as unknown as HueApi;
+  (setup as any).hueApiFactory = () => mockHueApi as unknown as HueApi;
 
   // Transition to DISCOVER step
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
