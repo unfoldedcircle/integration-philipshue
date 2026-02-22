@@ -10,7 +10,10 @@ Fixes #123
 
 ## Type of change
 
+<!---
+
 Please delete options that are not relevant.
+-->
 
 - [ ] Bug fix (non-breaking change which fixes an issue)
 - [ ] New feature (non-breaking change which adds functionality)
@@ -29,6 +32,6 @@ Please also list any relevant details for your test configuration
 
 - [ ] My code follows the style guidelines of this project
 - [ ] My pull request represents one logical piece of work. Do not combine multiple unrelated changes into a single pull request.
-- [ ] My changes pass the linter tests `npm run code-check`. PRs with failing linter checks will not be merged.
+- [ ] My changes pass the linter checks `npm run code-check` and unit tests `npm run test`. PRs with failing linter or unit tests will not be merged.
 - [ ] I have tested and performed a self-review of my code
 

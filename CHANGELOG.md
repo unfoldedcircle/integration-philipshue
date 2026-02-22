@@ -12,6 +12,7 @@ _Changes in the next release_
 ### Added
 
 - Manual Hue hub setup option ([#39](https://github.com/unfoldedcircle/integration-philipshue/pull/39)).
+- Initial unit tests.
 
 ### Changed
 
@@ -28,6 +29,7 @@ _Changes in the next release_
 - Emit hub configuration change events ([#41](https://github.com/unfoldedcircle/integration-philipshue/pull/41)).
 - Only set entity state to unavailable for auth errors ([#42](https://github.com/unfoldedcircle/integration-philipshue/pull/42)).
 - Properly handle entity subscribe and unsubscribe events ([#44](https://github.com/unfoldedcircle/integration-philipshue/pull/44)).
+- Potential errors in color conversions.
 
 ---
 

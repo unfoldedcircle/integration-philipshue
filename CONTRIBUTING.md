@@ -56,9 +56,15 @@ With that out of the way, here's the process of creating a pull request and maki
    npm run code-check
    ```
 
-5. Push to your fork.
+5. Verify that all tests are passing and add or update unit tests for new functionality:
 
-6. Submit a pull request.
+   ```shell
+   npm run test
+   ```
+
+6. Push to your fork.
+
+7. Submit a pull request.
 
 At this point we will review the PR and give constructive feedback.  
 This is a time for discussion and improvements, and making the necessary changes will be required before we can
