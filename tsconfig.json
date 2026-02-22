@@ -10,6 +10,6 @@
     "esModuleInterop": true,
     "baseUrl": "."
   },
-  "include": ["src/**/*", "types/**/*"],
+  "include": ["src/**/*", "test/**/*", "types/**/*"],
   "exclude": ["node_modules", "dist"]
 }

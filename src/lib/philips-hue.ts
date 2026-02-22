@@ -238,6 +238,7 @@ class PhilipsHue {
             }
           }
           if (params?.color_temperature !== undefined) {
+            // TODO consider lamp specific min / max mirek values
             req.color_temperature = { mirek: colorTempToMirek(Number(params.color_temperature)) };
           }
           if (params?.hue !== undefined && params?.saturation !== undefined) {

@@ -122,6 +122,9 @@ export function getMinMaxMirek(
 }
 
 export function convertXYtoHSV(x: number, y: number, lightness = 1) {
+  if (y === 0 || lightness <= 0) {
+    return { hue: 0, sat: 0 };
+  }
   const Y = lightness;
   const X = (x / y) * Y;
   const Z = ((1 - x - y) / y) * Y;
@@ -131,6 +134,10 @@ export function convertXYtoHSV(x: number, y: number, lightness = 1) {
   const B = 0.0557 * X - 0.204 * Y + 1.057 * Z;
 
   const V = Math.max(R, G, B);
+  if (V <= 0) {
+    return { hue: 0, sat: 0 };
+  }
+
   const minRGB = Math.min(R, G, B);
   const S = (V - minRGB) / V;
 
@@ -217,14 +224,28 @@ export function isValidHttpUrl(url: string): boolean {
   }
 }
 
+// TODO add min / max mirek values for lamp specific values
 export function mirekToColorTemp(colorTemp: number) {
+  if (isNaN(colorTemp) || colorTemp <= 153) {
+    return 0;
+  }
+  if (colorTemp >= 500) {
+    return 100;
+  }
   // color temperature range is (integer – minimum: 153 – maximum: 500)
   // 347
   colorTemp = colorTemp - 153;
   return (colorTemp / 347) * 100;
 }
 
+// TODO add min / max mirek values for lamp specific values
 export function colorTempToMirek(colorTemp: number) {
+  if (isNaN(colorTemp) || colorTemp <= 0) {
+    return 153;
+  }
+  if (colorTemp >= 100) {
+    return 500;
+  }
   colorTemp = (colorTemp / 100) * 347;
   return Math.round(colorTemp + 153);
 }
@@ -235,10 +256,22 @@ export function colorTempToMirek(colorTemp: number) {
  * @returns The brightness value as a percentage (1-100)
  */
 export function brightnessToPercent(brightness: number) {
+  if (isNaN(brightness) || brightness <= 0) {
+    return 1;
+  }
+  if (brightness >= 255) {
+    return 100;
+  }
   return Math.max(1, Math.round((brightness / 255) * 100));
 }
 
 export function percentToBrightness(percent: number) {
+  if (isNaN(percent) || percent <= 0) {
+    return 1;
+  }
+  if (percent >= 100) {
+    return 255;
+  }
   return Math.max(1, Math.round((percent / 100) * 255));
 }
 
