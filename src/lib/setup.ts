@@ -19,7 +19,15 @@ import {
 import { Bonjour } from "bonjour-service";
 import Config from "../config.js";
 import log from "../log.js";
-import { addAvailableLights, addAvailableGroups, convertImageToBase64, delay, getHubUrl, i18all } from "../util.js";
+import {
+  addAvailableLights,
+  addAvailableGroups,
+  convertImageToBase64,
+  delay,
+  getHubUrl,
+  i18all,
+  normalizeBridgeId
+} from "../util.js";
 import HueApi from "./hue-api/api.js";
 import os from "os";
 import * as uc from "@unfoldedcircle/integration-api";
@@ -47,14 +55,15 @@ class PhilipsHueSetup {
   private setupStep = SetupSteps.INIT;
   private cfgAddDevice = false;
   private manualAddress = false;
-  private bonjour: Bonjour;
+  private bonjourFactory: () => Bonjour;
   private hubs: HueHub[] = [];
   private hueApi: HueApi;
   private config: Config;
   private selectedHub: HueHub | null = null;
+  private discoveryDelay = 4000;
 
   constructor(config: Config) {
-    this.bonjour = new Bonjour();
+    this.bonjourFactory = () => new Bonjour();
     this.hueApi = new HueApi();
     this.config = config;
   }
@@ -355,13 +364,14 @@ class PhilipsHueSetup {
         try {
           this.hueApi.setBaseUrl(getHubUrl(msg.inputValues.address));
           const hubConfig = await this.hueApi.getHubConfig();
+          const bridgeId = normalizeBridgeId(hubConfig.bridgeid);
 
-          if (this.cfgAddDevice && this.config.getHubConfig()?.bridgeId === hubConfig.bridgeid) {
+          if (this.cfgAddDevice && this.config.getHubConfig()?.bridgeId === bridgeId) {
             // Prepared for multiple hubs: should not happen since only one Hub is supported at the moment.
-            log.info("Hub already configured, skipping manual device %s", hubConfig.bridgeid);
+            log.info("Hub already configured, skipping manual device %s", bridgeId);
           } else {
             const hub: HueHub = {
-              id: hubConfig.bridgeid,
+              id: bridgeId,
               ip: msg.inputValues.address,
               name: hubConfig.name
             };
@@ -377,7 +387,8 @@ class PhilipsHueSetup {
     if (!this.manualAddress) {
       log.info("Starting mDNS discovery of Hue hubs on the network");
 
-      this.bonjour.find({ type: "hue" }, (service) => {
+      const bonjour = this.bonjourFactory();
+      bonjour.find({ type: "hue" }, (service) => {
         if (!service.addresses) {
           log.warn("Hue bridge discovery: no address found", service.host);
           return;
@@ -396,7 +407,13 @@ class PhilipsHueSetup {
         this.hubs.push(hub);
       });
 
-      await delay(4000);
+      await delay(this.discoveryDelay);
+      // Ensure mDNS browser is stopped to avoid open handles in tests/runtime
+      try {
+        bonjour.destroy();
+      } catch {
+        // ignore
+      }
     }
 
     if (this.hubs.length === 0) {
@@ -407,22 +424,23 @@ class PhilipsHueSetup {
         i18all("setup.discovery_failed.header")
       );
     } else {
-      // verify each discovered hub: only v2 hubs are supported
-      const filteredHubs = this.hubs.filter(async (hub) => {
+      const filteredHubs: HueHub[] = [];
+      for (const hub of this.hubs) {
         try {
           log.debug("Found hub %s: checking if it is a v2 bridge", hub.ip);
           this.hueApi.setBaseUrl(getHubUrl(hub.ip));
-          await this.hueApi.is_hue_bridge();
+          const bridgeId = await this.hueApi.is_hue_bridge();
           if (!(await this.hueApi.is_v2_bridge())) {
             log.warn("Hub %s is not a v2 bridge, skipping", hub.ip);
-            return false;
+            continue;
           }
+          // update hub.id with normalized bridge ID
+          hub.id = bridgeId;
+          filteredHubs.push(hub);
         } catch (e) {
           log.warn("Hub %s is either not a Hue bridge, or connection failed: %s", hub.ip, e);
-          return false;
         }
-        return true;
-      });
+      }
 
       log.info("Hue bridge discovery: found v2 hubs", filteredHubs);
 
