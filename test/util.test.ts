@@ -15,7 +15,8 @@ import {
   getMinMaxMirek,
   delay,
   convertImageToBase64,
-  i18all
+  i18all,
+  isDeepEqual
 } from "../src/util.js";
 import { LightFeatures } from "@unfoldedcircle/integration-api";
 import { CombinedGroupResource, LightResource } from "../src/lib/hue-api/types.js";
@@ -312,4 +313,56 @@ test("i18all returns translations", (t) => {
   } finally {
     i18n.__h = originalH;
   }
+});
+
+// --- isDeepEqual ---
+
+test("isDeepEqual compares primitives", (t) => {
+  t.true(isDeepEqual(1, 1));
+  t.true(isDeepEqual("a", "a"));
+  t.true(isDeepEqual(true, true));
+  t.true(isDeepEqual(null, null));
+  t.true(isDeepEqual(undefined, undefined));
+  t.true(isDeepEqual(NaN, NaN));
+
+  t.false(isDeepEqual(1, 2));
+  t.false(isDeepEqual("a", "b"));
+  t.false(isDeepEqual(true, false));
+  t.false(isDeepEqual(null, undefined));
+});
+
+test("isDeepEqual compares objects", (t) => {
+  t.true(isDeepEqual({ a: 1 }, { a: 1 }));
+  t.true(isDeepEqual({ a: { b: 2 } }, { a: { b: 2 } }));
+  t.false(isDeepEqual({ a: 1 }, { a: 2 }));
+  t.false(isDeepEqual({ a: 1 }, { b: 1 }));
+  t.false(isDeepEqual({ a: 1 }, { a: 1, b: 2 }));
+});
+
+test("isDeepEqual compares arrays", (t) => {
+  t.true(isDeepEqual([1, 2], [1, 2]));
+  t.true(isDeepEqual([{ a: 1 }], [{ a: 1 }]));
+  t.false(isDeepEqual([1, 2], [1, 3]));
+  t.false(isDeepEqual([1, 2], [1, 2, 3]));
+});
+
+test("isDeepEqual compares complex objects", (t) => {
+  const obj1 = {
+    name: "Light 1",
+    features: [1, 2],
+    mirek_schema: { min: 153, max: 500 }
+  };
+  const obj2 = {
+    name: "Light 1",
+    features: [1, 2],
+    mirek_schema: { min: 153, max: 500 }
+  };
+  const obj3 = {
+    name: "Light 1",
+    features: [1, 3],
+    mirek_schema: { min: 153, max: 500 }
+  };
+
+  t.true(isDeepEqual(obj1, obj2));
+  t.false(isDeepEqual(obj1, obj3));
 });

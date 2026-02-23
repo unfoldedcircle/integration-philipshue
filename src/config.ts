@@ -11,6 +11,7 @@ import fs from "fs";
 import path from "path";
 import log from "./log.js";
 import { GamutType, GroupType } from "./lib/hue-api/types.js";
+import { isDeepEqual } from "./util.js";
 
 const CFG_FILENAME = "philips_hue_config.json";
 
@@ -87,6 +88,9 @@ class Config extends EventEmitter {
   }
 
   public updateLight(id: string, light: LightOrGroupConfig) {
+    if (this.config.lights[id] && isDeepEqual(this.config.lights[id], light)) {
+      return;
+    }
     this.config.lights[id] = light;
     this.saveToFile();
   }
