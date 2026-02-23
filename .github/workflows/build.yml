@@ -92,6 +92,7 @@ jobs:
         run: |
           mkdir -p artifacts
           cd artifacts
+          mkdir -p bin
           echo ${{ env.VERSION }} > version.txt
 
       # Integration driver archive requirements:
@@ -107,8 +108,7 @@ jobs:
       - name: Create custom intg archive
         shell: bash
         run: |
-          mv dist artifacts/
-          mv artifacts/dist artifacts/bin
+          mv dist/src artifacts/bin
           cp -r assets artifacts/bin/
           cp package.json artifacts/bin/
           mv node_modules artifacts/bin/

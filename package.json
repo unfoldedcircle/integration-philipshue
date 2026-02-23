@@ -9,7 +9,7 @@
     "code-check": "prettier --check . && eslint . --ext .ts",
     "lint": "eslint --fix --ext .ts",
     "test": "tsc && ava dist/test/**/*.js",
-    "build": "tsc --project tsconfig.build.json",
+    "build": "tsc",
     "start": "npm run build && node dist/driver.js"
   },
   "author": "Unfolded Circle",
