@@ -366,3 +366,10 @@ test("isDeepEqual compares complex objects", (t) => {
   t.true(isDeepEqual(obj1, obj2));
   t.false(isDeepEqual(obj1, obj3));
 });
+
+test("isDeepEqual handles undefined as non-existing", (t) => {
+  t.true(isDeepEqual({ a: 1 }, { a: 1, b: undefined }));
+  t.true(isDeepEqual({ a: 1, b: undefined }, { a: 1 }));
+  t.true(isDeepEqual({ a: 1, b: undefined }, { a: 1, c: undefined }));
+  t.false(isDeepEqual({ a: 1 }, { a: 1, b: null }));
+});

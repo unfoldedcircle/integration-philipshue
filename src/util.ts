@@ -376,6 +376,8 @@ export function i18all(key: string): Record<string, string> {
 /**
  * Performs a deep comparison between two values to determine if they are equivalent.
  *
+ * Object fields set to `undefined` are ignored.
+ *
  * @param a The first value to compare.
  * @param b The second value to compare.
  * @returns True if the values are equivalent, false otherwise.
@@ -403,13 +405,15 @@ export function isDeepEqual(a: any, b: any): boolean {
       return true;
     }
 
-    const keys = Object.keys(a);
-    if (keys.length !== Object.keys(b).length) {
+    const keysA = Object.keys(a).filter((k) => a[k] !== undefined);
+    const keysB = Object.keys(b).filter((k) => b[k] !== undefined);
+
+    if (keysA.length !== keysB.length) {
       return false;
     }
 
-    for (const key of keys) {
-      if (!Object.prototype.hasOwnProperty.call(b, key)) {
+    for (const key of keysA) {
+      if (!keysB.includes(key)) {
         return false;
       }
       if (!isDeepEqual(a[key], b[key])) {
