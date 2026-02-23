@@ -246,7 +246,9 @@ class PhilipsHue {
             req.color_temperature = { mirek: colorTempToMirek(Number(params.color_temperature)) };
           }
           if (params?.hue !== undefined && params?.saturation !== undefined) {
-            req.color = { xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), 1) };
+            const currentB = Number(entity.attributes?.[LightAttributes.Brightness]);
+            const v = Number.isFinite(currentB) ? Math.max(0, Math.min(currentB, 255)) / 255 : 1;
+            req.color = { xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), v) };
           }
           await this.hueApi.lightResource.updateLightState(entityId, req, !isGroup);
           break;
