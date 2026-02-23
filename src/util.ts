@@ -260,30 +260,26 @@ export function isValidHttpUrl(url: string): boolean {
   }
 }
 
-// TODO add min / max mirek values for lamp specific values
-export function mirekToColorTemp(colorTemp: number) {
-  if (isNaN(colorTemp) || colorTemp <= 153) {
+export function mirekToColorTemp(colorTemp: number, minMirek = 153, maxMirek = 500) {
+  if (isNaN(colorTemp) || colorTemp <= minMirek) {
     return 0;
   }
-  if (colorTemp >= 500) {
+  if (colorTemp >= maxMirek) {
     return 100;
   }
-  // color temperature range is (integer – minimum: 153 – maximum: 500)
-  // 347
-  colorTemp = colorTemp - 153;
-  return (colorTemp / 347) * 100;
+  const range = maxMirek - minMirek;
+  return ((colorTemp - minMirek) / range) * 100;
 }
 
-// TODO add min / max mirek values for lamp specific values
-export function colorTempToMirek(colorTemp: number) {
+export function colorTempToMirek(colorTemp: number, minMirek = 153, maxMirek = 500) {
   if (isNaN(colorTemp) || colorTemp <= 0) {
-    return 153;
+    return minMirek;
   }
   if (colorTemp >= 100) {
-    return 500;
+    return maxMirek;
   }
-  colorTemp = (colorTemp / 100) * 347;
-  return Math.round(colorTemp + 153);
+  const range = maxMirek - minMirek;
+  return Math.round((colorTemp / 100) * range + minMirek);
 }
 
 /**

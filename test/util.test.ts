@@ -60,6 +60,12 @@ test("mirekToColorTemp converts 153-500 to 0-100", (t) => {
   t.is(Math.round(mirekToColorTemp(326.5)), 50);
 });
 
+test("mirekToColorTemp with custom range", (t) => {
+  t.is(mirekToColorTemp(200, 200, 400), 0);
+  t.is(mirekToColorTemp(400, 200, 400), 100);
+  t.is(mirekToColorTemp(300, 200, 400), 50);
+});
+
 test("mirekToColorTemp handles invalid values", (t) => {
   t.is(mirekToColorTemp(152), 0);
   t.is(mirekToColorTemp(501), 100);
@@ -71,6 +77,12 @@ test("colorTempToMirek converts 0-100 to 153-500", (t) => {
   t.is(colorTempToMirek(0), 153);
   t.is(colorTempToMirek(100), 500);
   t.is(colorTempToMirek(50), 327);
+});
+
+test("colorTempToMirek with custom range", (t) => {
+  t.is(colorTempToMirek(0, 200, 400), 200);
+  t.is(colorTempToMirek(100, 200, 400), 400);
+  t.is(colorTempToMirek(50, 200, 400), 300);
 });
 
 test("colorTempToMirek handles invalid values", (t) => {
