@@ -14,15 +14,17 @@ import { HueEvent } from "./types.js";
 class HueEventStream extends EventEmitter {
   private es: EventSource | null = null;
   private connected = false;
+  private connecting = false;
 
-  constructor() {
+  constructor(private readonly EventSourceImpl: typeof EventSource = EventSource) {
     super();
   }
 
   connect(hubUrl: string, authKey: string, connectionTimeout: number = 6000) {
-    if (this.connected) {
+    if (this.connected || this.connecting) {
       return;
     }
+    this.connecting = true;
     if (this.es) {
       this.es.close();
     }
@@ -40,7 +42,7 @@ class HueEventStream extends EventEmitter {
       "hue-application-key": authKey
     };
 
-    this.es = new EventSource(hubUrl + "/eventstream/clip/v2", {
+    this.es = new this.EventSourceImpl(hubUrl + "/eventstream/clip/v2", {
       fetch: (input, init) =>
         fetch(input, {
           ...init,
@@ -55,6 +57,7 @@ class HueEventStream extends EventEmitter {
     this.es.onopen = () => {
       log.debug("Philips Hue event stream connected");
       this.connected = true;
+      this.connecting = false;
       this.emit("connected");
     };
 
@@ -74,6 +77,7 @@ class HueEventStream extends EventEmitter {
       const message = err?.message ?? String(err);
       log.warn("Philips Hue event stream error %s: %s", code, message);
       this.connected = false;
+      this.connecting = false;
       this.emit("disconnected");
     };
   }
@@ -81,6 +85,7 @@ class HueEventStream extends EventEmitter {
   disconnect() {
     log.debug("Disconnecting Philips Hue event stream");
     this.connected = false;
+    this.connecting = false;
     if (this.es) {
       this.es.close();
       // do not emit "disconnected" event, otherwise a reconnection is triggered
