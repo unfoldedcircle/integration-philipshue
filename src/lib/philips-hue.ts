@@ -129,7 +129,7 @@ class PhilipsHue {
     });
   }
 
-  private async onCfgChange(_bridgeId: string) {
+  private onCfgChange(_bridgeId: string) {
     this.eventStream.disconnect();
 
     const hubCfg = this.config.getHubConfig();
@@ -142,7 +142,7 @@ class PhilipsHue {
     this.updateEntityIndexes();
   }
 
-  private async onCfgRemove(_bridgeId?: string) {
+  private onCfgRemove(_bridgeId?: string) {
     this.eventStream.disconnect();
     this.updateEntityStates(LightStates.Unavailable);
     // removing entities with a single bridge is easy
