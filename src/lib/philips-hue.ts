@@ -166,7 +166,11 @@ class PhilipsHue {
   private async readEntitiesFromConfig() {
     const lights = this.config.getLights();
     for (const light of lights) {
-      const lightEntity = new Light(light.id, light.name, { features: light.features });
+      const lightEntity = new Light(light.id, light.name, {
+        icon: this.getEntityIcon(light),
+        description: this.getEntityDescription(light),
+        features: light.features
+      });
       this.addAvailableLight(lightEntity);
     }
   }
@@ -256,11 +260,35 @@ class PhilipsHue {
   private handleConfigEvent(event: ConfigEvent) {
     if (event.type === "light-added") {
       const light = new Light(event.data.id, event.data.name, {
+        icon: this.getEntityIcon(event.data),
+        description: this.getEntityDescription(event.data),
         features: event.data.features
       });
       this.addAvailableLight(light);
     }
     this.updateEntityIndexes();
+  }
+
+  /**
+   * Return a custom icon for a light or group based on its type.
+   */
+  private getEntityIcon(light: LightOrGroupConfig): string | undefined {
+    if ("groupType" in light) {
+      return light.groupType === "room" ? "uc:vector-square" : "uc:rectangles-mixed";
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Return a custom description for a light or group based on its type.
+   */
+  private getEntityDescription(light: LightOrGroupConfig): string | undefined {
+    if ("groupType" in light) {
+      return `${light.groupType === "room" ? "Room group" : "Zone group"} with ${light.childLightIds.length} light(s)`;
+    }
+
+    return undefined;
   }
 
   private addAvailableLight(light: Light) {
