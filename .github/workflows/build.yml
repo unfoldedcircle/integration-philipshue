@@ -110,7 +110,7 @@ jobs:
           cp -r assets artifacts/bin/
           cp package.json artifacts/bin/
           mv node_modules artifacts/bin/
-          mkdir -p artifacts/data && cp -r locales artifacts/data/locales
+          mkdir -p artifacts/data
           cp driver.json artifacts/
           # patch metadata to not conflict with pre-installed driver
           jq '.driver_id = "uc_hue_driver_custom" | .name.en = "Hue custom"' driver.json > artifacts/driver.json

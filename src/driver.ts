@@ -16,9 +16,7 @@ const __dirname = import.meta.dirname;
 i18n.configure({
   locales: ["en", "de", "fr"],
   defaultLocale: "en",
-  directory: process.env.UC_DATA_HOME
-    ? path.join(process.env.UC_DATA_HOME, "locales")
-    : path.join(__dirname, "..", "locales"),
+  directory: path.join(__dirname, "locales"),
   objectNotation: true
 });
 
