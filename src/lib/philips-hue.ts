@@ -330,7 +330,7 @@ class PhilipsHue {
     const results = new Set(
       await Promise.all(
         entityIds.map(async (entityId) => {
-          return await this.handleSingleLightCmd(entity, entityId, command, isGroup, params);
+          return await this.handleSingleLightCmd(entity, entityId, entityConfig, command, isGroup, params);
         })
       )
     );
@@ -347,6 +347,7 @@ class PhilipsHue {
   private async handleSingleLightCmd(
     entity: Entity,
     entityId: string,
+    entityConfig: LightOrGroupConfig,
     command: string,
     isGroup: boolean,
     params?: { [key: string]: string | number | boolean }
@@ -394,7 +395,9 @@ class PhilipsHue {
           if (params?.hue !== undefined && params?.saturation !== undefined) {
             const currentB = Number(entity.attributes?.[LightAttributes.Brightness]);
             const v = Number.isFinite(currentB) ? Math.max(0, Math.min(currentB, 255)) / 255 : 1;
-            req.color = { xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), v) };
+            req.color = {
+              xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), v, entityConfig.gamut)
+            };
           }
           await this.hueApi.lightResource.updateLightState(v2EntityId, req, !isGroup);
           break;
@@ -749,7 +752,13 @@ class PhilipsHue {
     }
 
     if (light.color && light.color.xy) {
-      const { hue, sat } = convertXYtoHSV(light.color.xy.x, light.color.xy.y, light.dimming?.brightness);
+      const config = this.config.getLight(v2Id);
+      const { hue, sat } = convertXYtoHSV(
+        light.color.xy.x,
+        light.color.xy.y,
+        light.dimming?.brightness,
+        light.color.gamut ?? config?.gamut
+      );
       lightState[LightAttributes.Hue] = hue;
       lightState[LightAttributes.Saturation] = sat;
     }
@@ -804,7 +813,13 @@ class PhilipsHue {
     const color =
       groupedLights?.find((groupLight) => groupLight.color?.xy) ?? group.lights?.find((light) => light.color?.xy);
     if (color?.color && color.color.xy) {
-      const { hue, sat } = convertXYtoHSV(color.color.xy.x, color.color.xy.y, color.dimming?.brightness);
+      const config = this.config.getLight(entityId);
+      const { hue, sat } = convertXYtoHSV(
+        color.color.xy.x,
+        color.color.xy.y,
+        color.dimming?.brightness,
+        color.color.gamut ?? config?.gamut
+      );
       groupState[LightAttributes.Hue] = hue;
       groupState[LightAttributes.Saturation] = sat;
     }
