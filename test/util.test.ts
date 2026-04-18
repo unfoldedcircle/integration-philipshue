@@ -121,64 +121,37 @@ test("convertXYtoHSV handles zero values", (t) => {
   t.deepEqual(convertXYtoHSV(0.4, -0.1), { hue: 0, sat: 0 });
 });
 
-test("convertXYtoHSV handles black/zero lightness", (t) => {
-  // make sure lightness = 0 doesn't cause division by zero
-  const result = convertXYtoHSV(0.4, 0.4, 0);
-  t.is(result.hue, 0);
-  t.is(result.sat, 0);
-});
-
 test("convertXYtoHSV and convertHSVtoXY round-trip (approximate)", (t) => {
   const x = 0.4;
   const y = 0.4;
   const hsv = convertXYtoHSV(x, y);
-  const xy = convertHSVtoXY(hsv.hue, hsv.sat, 1);
+  const xy = convertHSVtoXY(hsv.hue, hsv.sat);
 
   t.true(Math.abs(xy.x - x) < 0.1, `x: ${xy.x} vs ${x}`);
   t.true(Math.abs(xy.y - y) < 0.1, `y: ${xy.y} vs ${y}`);
 });
 
-test("convertXYtoHSV keeps hue and saturation stable across Hue lightness scale", (t) => {
-  const base = convertXYtoHSV(0.31, 0.33, 1);
-  const mid = convertXYtoHSV(0.31, 0.33, 50);
-  const bright = convertXYtoHSV(0.31, 0.33, 100);
-
-  t.true(Math.abs(mid.hue - base.hue) <= 1, `mid hue drift: ${mid.hue} vs ${base.hue}`);
-  t.true(Math.abs(bright.hue - base.hue) <= 1, `bright hue drift: ${bright.hue} vs ${base.hue}`);
-  t.true(Math.abs(mid.sat - base.sat) <= 1, `mid sat drift: ${mid.sat} vs ${base.sat}`);
-  t.true(Math.abs(bright.sat - base.sat) <= 1, `bright sat drift: ${bright.sat} vs ${base.sat}`);
-});
-
-test("convertHSVtoXY handles black (sum=0)", (t) => {
-  const xy = convertHSVtoXY(0, 0, 0);
-  t.is(xy.x, 0.3);
-  t.is(xy.y, 0.3);
-});
-
 test("convertHSVtoXY normalizes wrapped hue values", (t) => {
-  const wrapped = convertHSVtoXY(-60, 255, 1);
-  const expected = convertHSVtoXY(300, 255, 1);
+  const wrapped = convertHSVtoXY(-60, 255);
+  const expected = convertHSVtoXY(300, 255);
 
   t.true(Math.abs(wrapped.x - expected.x) < 1e-6);
   t.true(Math.abs(wrapped.y - expected.y) < 1e-6);
 });
 
-test("convertHSVtoXY clamps finite saturation and value inputs", (t) => {
-  const expectedGray = convertHSVtoXY(120, 0, 1);
-  const clampedLowSat = convertHSVtoXY(120, -10, 1);
+test("convertHSVtoXY clamps saturation inputs to the valid range", (t) => {
+  const expectedGray = convertHSVtoXY(120, 0);
+  const clampedLowSat = convertHSVtoXY(120, -10);
   t.deepEqual(clampedLowSat, expectedGray);
 
-  const expectedFullSat = convertHSVtoXY(120, 255, 1);
-  const clampedHighSat = convertHSVtoXY(120, 999, 1);
+  const expectedFullSat = convertHSVtoXY(120, 255);
+  const clampedHighSat = convertHSVtoXY(120, 999);
   t.deepEqual(clampedHighSat, expectedFullSat);
-
-  const clampedHighValue = convertHSVtoXY(120, 255, 2);
-  t.deepEqual(clampedHighValue, expectedFullSat);
 });
 
 test("convertXYtoHSV keeps grayscale colors unsaturated", (t) => {
-  const xyWhite = convertHSVtoXY(42, 0, 1);
-  const hsvWhite = convertXYtoHSV(xyWhite.x, xyWhite.y, 100);
+  const xyWhite = convertHSVtoXY(42, 0);
+  const hsvWhite = convertXYtoHSV(xyWhite.x, xyWhite.y);
 
   t.is(hsvWhite.sat, 0);
 });
@@ -186,14 +159,14 @@ test("convertXYtoHSV keeps grayscale colors unsaturated", (t) => {
 test("color conversion handles invalid numeric input safely", (t) => {
   t.deepEqual(convertXYtoHSV(NaN, 0.3), { hue: 0, sat: 0 });
   t.deepEqual(convertXYtoHSV(0.3, Infinity), { hue: 0, sat: 0 });
-  t.deepEqual(convertHSVtoXY(NaN, 255, 1), { x: 0.3, y: 0.3 });
-  t.deepEqual(convertHSVtoXY(0, 255, Infinity), { x: 0.3, y: 0.3 });
+  t.deepEqual(convertHSVtoXY(NaN, 255), { x: 0.3, y: 0.3 });
+  t.deepEqual(convertHSVtoXY(0, Infinity), { x: 0.3, y: 0.3 });
 });
 
 test("convertHSVtoXY and convertXYtoHSV keep partially saturated colors close", (t) => {
-  const source = { hue: 210, sat: 120, value: 0.6 };
-  const xy = convertHSVtoXY(source.hue, source.sat, source.value);
-  const restored = convertXYtoHSV(xy.x, xy.y, source.value * 100);
+  const source = { hue: 210, sat: 120 };
+  const xy = convertHSVtoXY(source.hue, source.sat);
+  const restored = convertXYtoHSV(xy.x, xy.y);
   const hueDelta = Math.min(Math.abs(restored.hue - source.hue), 360 - Math.abs(restored.hue - source.hue));
 
   t.true(hueDelta <= 8, `hue: ${restored.hue} vs ${source.hue}`);
@@ -208,8 +181,8 @@ const GAMUT_B: GamutTriangle = {
 };
 
 test("convertHSVtoXY clips out-of-gamut colors when gamut is provided", (t) => {
-  const unclipped = convertHSVtoXY(120, 255, 1);
-  const clipped = convertHSVtoXY(120, 255, 1, GAMUT_B);
+  const unclipped = convertHSVtoXY(120, 255);
+  const clipped = convertHSVtoXY(120, 255, GAMUT_B);
 
   t.false(isPointInTriangle(unclipped, GAMUT_B));
   t.true(isPointInTriangle(clipped, GAMUT_B));
@@ -218,9 +191,9 @@ test("convertHSVtoXY clips out-of-gamut colors when gamut is provided", (t) => {
 
 test("convertXYtoHSV clips out-of-gamut xy before converting when gamut is provided", (t) => {
   const outOfGamut = { x: 0.17, y: 0.7 };
-  const clipped = convertHSVtoXY(120, 255, 1, GAMUT_B);
-  const convertedFromOutOfGamut = convertXYtoHSV(outOfGamut.x, outOfGamut.y, 100, GAMUT_B);
-  const convertedFromClipped = convertXYtoHSV(clipped.x, clipped.y, 100, GAMUT_B);
+  const clipped = convertHSVtoXY(120, 255, GAMUT_B);
+  const convertedFromOutOfGamut = convertXYtoHSV(outOfGamut.x, outOfGamut.y, GAMUT_B);
+  const convertedFromClipped = convertXYtoHSV(clipped.x, clipped.y, GAMUT_B);
 
   t.true(Math.abs(convertedFromOutOfGamut.hue - convertedFromClipped.hue) <= 1);
   t.true(Math.abs(convertedFromOutOfGamut.sat - convertedFromClipped.sat) <= 1);
@@ -232,8 +205,8 @@ test("invalid gamut input keeps legacy conversion behavior", (t) => {
     green: { x: 0.5, y: 0.5 },
     blue: { x: 1, y: 1 }
   };
-  const baseline = convertHSVtoXY(240, 255, 1);
-  const withInvalidGamut = convertHSVtoXY(240, 255, 1, invalidGamut);
+  const baseline = convertHSVtoXY(240, 255);
+  const withInvalidGamut = convertHSVtoXY(240, 255, invalidGamut);
 
   t.deepEqual(withInvalidGamut, baseline);
 });
@@ -242,36 +215,36 @@ test("convertXYtoHSV handles different sectors", (t) => {
   // Use known primary/secondary colors in RGB
   // We'll use the reverse conversion to get XY values that should map to these
 
-  // Red (H=0, S=255, V=1) -> XY
-  const xyRed = convertHSVtoXY(0, 255, 1);
+  // Red (H=0, S=255) -> XY
+  const xyRed = convertHSVtoXY(0, 255);
   const hsvRed = convertXYtoHSV(xyRed.x, xyRed.y);
   t.true(hsvRed.hue === 0 || hsvRed.hue === 359 || hsvRed.hue === 360);
   t.is(hsvRed.sat, 255);
 
-  // Green (H=120, S=255, V=1) -> XY
-  const xyGreen = convertHSVtoXY(120, 255, 1);
+  // Green (H=120, S=255) -> XY
+  const xyGreen = convertHSVtoXY(120, 255);
   const hsvGreen = convertXYtoHSV(xyGreen.x, xyGreen.y);
   t.is(hsvGreen.hue, 120);
   t.is(hsvGreen.sat, 255);
 
-  // Blue (H=240, S=255, V=1) -> XY
-  const xyBlue = convertHSVtoXY(240, 255, 1);
+  // Blue (H=240, S=255) -> XY
+  const xyBlue = convertHSVtoXY(240, 255);
   const hsvBlue = convertXYtoHSV(xyBlue.x, xyBlue.y);
   t.is(hsvBlue.hue, 240);
   t.is(hsvBlue.sat, 255);
 
-  // Yellow (H=60, S=255, V=1) -> XY
-  const xyYellow = convertHSVtoXY(60, 255, 1);
+  // Yellow (H=60, S=255) -> XY
+  const xyYellow = convertHSVtoXY(60, 255);
   const hsvYellow = convertXYtoHSV(xyYellow.x, xyYellow.y);
   t.is(hsvYellow.hue, 60);
 
-  // Cyan (H=180, S=255, V=1) -> XY
-  const xyCyan = convertHSVtoXY(180, 255, 1);
+  // Cyan (H=180, S=255) -> XY
+  const xyCyan = convertHSVtoXY(180, 255);
   const hsvCyan = convertXYtoHSV(xyCyan.x, xyCyan.y);
   t.is(hsvCyan.hue, 180);
 
-  // Magenta (H=300, S=255, V=1) -> XY
-  const xyMagenta = convertHSVtoXY(300, 255, 1);
+  // Magenta (H=300, S=255) -> XY
+  const xyMagenta = convertHSVtoXY(300, 255);
   const hsvMagenta = convertXYtoHSV(xyMagenta.x, xyMagenta.y);
   t.is(hsvMagenta.hue, 300);
 });

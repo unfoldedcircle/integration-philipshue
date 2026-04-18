@@ -270,24 +270,29 @@ function clipXYToGamut(x: number, y: number, gamut?: GamutTriangle): { x: number
 }
 
 /**
- * Convert CIE xy (plus brightness proxy) to HSV.
+ * Convert CIE xy to HSV hue and saturation.
+ *
+ * Brightness is intentionally not a parameter: it scales XYZ uniformly and
+ * cancels out under the subsequent max-channel normalisation, so the output
+ * HSV is invariant to it. Callers handle brightness separately via the
+ * CLIP v2 `dimming.brightness` channel.
  *
  * @param x CIE x coordinate.
  * @param y CIE y coordinate.
- * @param lightness Brightness in 0..1 or 0..100 (Hue API style).
  * @param gamut Optional lamp gamut triangle; when provided, xy is clipped before conversion.
  * @returns HSV values with hue in 0..359 and saturation in 0..255.
  */
-export function convertXYtoHSV(x: number, y: number, lightness = 1, gamut?: GamutTriangle) {
+export function convertXYtoHSV(x: number, y: number, gamut?: GamutTriangle) {
   // Invalid/degenerate xyY input maps to a neutral HSV fallback.
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(lightness) || y <= 0 || lightness <= 0) {
+  if (!Number.isFinite(x) || !Number.isFinite(y) || y <= 0) {
     return { hue: 0, sat: 0 };
   }
 
   const safeX = clamp(x, 0, 1);
   const safeY = clamp(y, EPSILON, 1);
   const clippedXY = clipXYToGamut(safeX, safeY, gamut);
-  const Y = lightness > 1 ? lightness / 100 : lightness;
+  // Y scale is arbitrary: the subsequent max-channel normalise removes it.
+  const Y = 1;
   const X = (Y / clippedXY.y) * clippedXY.x;
   const Z = (Y / clippedXY.y) * (1 - clippedXY.x - clippedXY.y);
 
@@ -357,28 +362,33 @@ export function convertXYtoHSV(x: number, y: number, lightness = 1, gamut?: Gamu
 }
 
 /**
- * Convert HSV to CIE xy.
+ * Convert HSV hue and saturation to CIE xy.
+ *
+ * HSV "value" (brightness) is intentionally not a parameter: in the Hue CLIP v2
+ * model chromaticity and luminance are orthogonal (color.xy vs. dimming.brightness),
+ * and coupling a value into this conversion introduces a non-linear shift in the
+ * computed xy via the sRGB gamma-decode step. Callers set brightness separately
+ * via `dimming.brightness`.
  *
  * @param hue Hue in degrees (0..360, wrapped if out of range).
  * @param saturation Saturation in 0..255.
- * @param value Value/brightness in 0..1.
  * @param gamut Optional lamp gamut triangle; when provided, xy is clipped before return.
  * @returns CIE xy coordinates.
  */
-export function convertHSVtoXY(hue: number, saturation: number, value: number, gamut?: GamutTriangle) {
-  // Invalid or black HSV input maps to the known safe default xy point.
-  if (!Number.isFinite(hue) || !Number.isFinite(saturation) || !Number.isFinite(value) || value <= 0) {
+export function convertHSVtoXY(hue: number, saturation: number, gamut?: GamutTriangle) {
+  // Invalid HSV input maps to the known safe default xy point.
+  if (!Number.isFinite(hue) || !Number.isFinite(saturation)) {
     return DEFAULT_XY;
   }
 
   const normalizedHue = ((hue % 360) + 360) % 360;
   const h = normalizedHue / 60;
   const s = clamp(saturation / 255, 0, 1);
-  const v = clamp(value, 0, 1);
 
-  const c = v * s;
+  // Value fixed at 1: brightness is an orthogonal axis set via dimming.brightness.
+  const c = s;
   const xComponent = c * (1 - Math.abs((h % 2) - 1));
-  const m = v - c;
+  const m = 1 - c;
 
   let r, g, b;
   if (h >= 0 && h < 1) {
@@ -406,7 +416,13 @@ export function convertHSVtoXY(hue: number, saturation: number, value: number, g
   g = gammaCorrect(g);
   b = gammaCorrect(b);
 
-  // Convert linear RGB to XYZ using the Wide RGB D65 matrix.
+  // Convert linear RGB to XYZ using Philips's "Wide RGB D65" matrix.
+  // Note: the narrative section of the Hue Color Conversion docs (step 3 under
+  // "RGB to xy") lists the standard sRGB→XYZ D65 coefficients (0.4124, 0.3576,
+  // ...) but labels them "Wide RGB D65" — that's a documentation error. The
+  // coefficients used here are from the iOS SDK extract in the same doc and are
+  // the mathematical inverse of the XYZ→RGB matrix used in convertXYtoHSV, so
+  // they are what keeps forward/reverse conversions self-consistent.
   const X = r * 0.664511 + g * 0.154324 + b * 0.162028;
   const Y = r * 0.283881 + g * 0.668433 + b * 0.047685;
   const Z = r * 0.000088 + g * 0.07231 + b * 0.986039;
