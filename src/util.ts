@@ -164,6 +164,9 @@ export function getMinMaxMirek(
 const DEFAULT_XY = { x: 0.3, y: 0.3 };
 // Small floor value to avoid division-by-zero in xy -> XYZ math.
 const EPSILON = 0.000001;
+// Standard CIE 1931 2° D65 white point. Used as the origin when expressing a
+// bulb's color as "how far from white" (gamut-relative saturation) on readback.
+const D65: { x: number; y: number } = { x: 0.3127, y: 0.329 };
 
 /**
  * Pick a representative gamut triangle for a mixed group by choosing the triangle
@@ -270,6 +273,62 @@ function clipXYToGamut(x: number, y: number, gamut?: GamutTriangle): { x: number
 }
 
 /**
+ * Compute gamut-relative saturation: the ratio of |xy - D65| to the distance
+ * from D65 to the gamut-triangle boundary along the same ray. Returns a value
+ * in [0, 1] where 0 is white (D65) and 1 is the gamut edge.
+ *
+ * This differs from sRGB-HSV saturation, which measures "distance to nearest
+ * sRGB primary" in gamma-encoded sRGB space. sRGB-HSV only returns 1 when xy
+ * aligns with a Wide RGB D65 primary direction; for most hues the bulb's
+ * gamut corner is off-axis and sRGB-HSV under-reports saturation even when
+ * the bulb is physically at its gamut edge — symptom: the UC wheel's dot sits
+ * inside the boundary at max bulb saturation for most hues, and contracts
+ * toward center faster than the Hue app as xy moves radially inward.
+ *
+ * Gamut-relative saturation matches the UC remote wheel's UX semantic — outer
+ * edge = maximum achievable saturation at this hue for this bulb — and the
+ * Hue app's wheel behavior. It is NOT the mathematical inverse of
+ * convertHSVtoXY (which follows the Philips-docs HSV→sRGB→xy pipeline), so
+ * round-tripping HSV → xy → HSV is approximate rather than exact when this
+ * path is used.
+ *
+ * Ray-edge intersection is solved per edge via a 2×2 linear system. For a
+ * point inside or on the triangle, exactly one edge yields t > 0 and
+ * u ∈ [0, 1]; tied intersections at a vertex resolve to the same t.
+ */
+function computeGamutRelativeSaturation(xy: { x: number; y: number }, gamut: GamutTriangle): number {
+  const dx = xy.x - D65.x;
+  const dy = xy.y - D65.y;
+  if (dx * dx + dy * dy <= EPSILON * EPSILON) return 0;
+
+  const edges: Array<[{ x: number; y: number }, { x: number; y: number }]> = [
+    [gamut.red, gamut.green],
+    [gamut.green, gamut.blue],
+    [gamut.blue, gamut.red]
+  ];
+
+  let tEdge = Infinity;
+  for (const [A, B] of edges) {
+    const ex = B.x - A.x;
+    const ey = B.y - A.y;
+    // Solve u * edge - t * dir = D65 - A  (where dir = xy - D65).
+    // denom = cross(edge, dir); zero means the ray is parallel to this edge.
+    const denom = ex * dy - ey * dx;
+    if (Math.abs(denom) <= EPSILON) continue;
+    const rx = D65.x - A.x;
+    const ry = D65.y - A.y;
+    const u = (rx * dy - ry * dx) / denom;
+    const t = (rx * ey - ry * ex) / denom;
+    if (u >= -EPSILON && u <= 1 + EPSILON && t > EPSILON && t < tEdge) {
+      tEdge = t;
+    }
+  }
+
+  if (!Number.isFinite(tEdge)) return 0;
+  return clamp(1 / tEdge, 0, 1);
+}
+
+/**
  * Convert CIE xy to HSV hue and saturation.
  *
  * Brightness is intentionally not a parameter: it scales XYZ uniformly and
@@ -277,9 +336,27 @@ function clipXYToGamut(x: number, y: number, gamut?: GamutTriangle): { x: number
  * HSV is invariant to it. Callers handle brightness separately via the
  * CLIP v2 `dimming.brightness` channel.
  *
+ * IMPORTANT — intentional round-trip divergence when `gamut` is supplied:
+ * the saturation returned is NOT the mathematical inverse of `convertHSVtoXY`.
+ * When a gamut is available this function substitutes a gamut-relative
+ * saturation (`|xy − D65|` normalised to the distance from D65 to the gamut
+ * boundary along the D65→xy ray) for the sRGB-HSV saturation that would
+ * otherwise be the inverse. This is deliberate: the UC remote wheel and the
+ * Hue app wheel are gamut-calibrated (outer edge = max achievable saturation
+ * for the bulb at that hue), and sRGB-HSV saturation only reaches 1 when xy
+ * lies along a Wide-RGB-D65 primary axis — for every other hue the bulb's
+ * gamut corner is off-axis and sRGB-HSV under-reports, so the UC dot would
+ * sit inside the wheel boundary even when the bulb is physically maxed out.
+ * Consequence: `HSV → xy → HSV` does not round-trip exactly along the
+ * gamut-provided path; the hue component is stable but the saturation
+ * component is the gamut-relative measure. Do not "fix" this by reverting
+ * to sRGB-HSV saturation without replacing the wheel semantic. See
+ * `computeGamutRelativeSaturation` for the derivation.
+ *
  * @param x CIE x coordinate.
  * @param y CIE y coordinate.
- * @param gamut Optional lamp gamut triangle; when provided, xy is clipped before conversion.
+ * @param gamut Optional lamp gamut triangle; when provided, xy is clipped before conversion
+ *   AND saturation is reported as gamut-relative (see note above).
  * @returns HSV values with hue in 0..359 and saturation in 0..255.
  */
 export function convertXYtoHSV(x: number, y: number, gamut?: GamutTriangle) {
@@ -339,7 +416,7 @@ export function convertXYtoHSV(x: number, y: number, gamut?: GamutTriangle) {
 
   const minSRgb = Math.min(r, g, b);
   const span = maxRgb - minSRgb;
-  const sat = span === 0 ? 0 : Math.round((span / maxRgb) * 255);
+  let sat = span === 0 ? 0 : Math.round((span / maxRgb) * 255);
 
   let H: number;
   if (span === 0) {
@@ -353,6 +430,19 @@ export function convertXYtoHSV(x: number, y: number, gamut?: GamutTriangle) {
   }
   if (H < 0) {
     H += 360;
+  }
+
+  // When a bulb gamut is available, override the sRGB-HSV saturation with a
+  // gamut-relative measure so the reported value matches what a gamut-calibrated
+  // UI (UC remote wheel, Hue app wheel) expects: 255 at the gamut edge, 0 at
+  // D65, linear in radial distance between. sRGB-HSV — what we'd otherwise
+  // return — compresses saturation for hue angles where the bulb's gamut corner
+  // is off-axis from the Wide RGB D65 primaries, which produces a visible
+  // mismatch with the Hue app during radial drags. See
+  // computeGamutRelativeSaturation for the full rationale; this path is
+  // intentionally NOT the mathematical inverse of convertHSVtoXY.
+  if (gamut && isValidGamut(gamut)) {
+    sat = Math.round(computeGamutRelativeSaturation(clippedXY, gamut) * 255);
   }
 
   return {

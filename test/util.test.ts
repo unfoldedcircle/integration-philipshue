@@ -211,6 +211,60 @@ test("invalid gamut input keeps legacy conversion behavior", (t) => {
   t.deepEqual(withInvalidGamut, baseline);
 });
 
+// Gamut C triangle (most modern Hue bulbs) for gamut-relative saturation tests.
+const GAMUT_C: GamutTriangle = {
+  red: { x: 0.6915, y: 0.3038 },
+  green: { x: 0.17, y: 0.7 },
+  blue: { x: 0.1532, y: 0.0475 }
+};
+const D65 = { x: 0.3127, y: 0.329 };
+
+test("convertXYtoHSV reports sat=255 at the gamut red corner (gamut-relative)", (t) => {
+  // sRGB-HSV returns ≈243 here because the bulb's red corner is off-axis from
+  // the Wide-RGB-D65 red primary. Gamut-relative should return 255.
+  const { sat } = convertXYtoHSV(GAMUT_C.red.x, GAMUT_C.red.y, GAMUT_C);
+  t.is(sat, 255);
+});
+
+test("convertXYtoHSV reports sat=255 at the gamut green corner (gamut-relative)", (t) => {
+  const { sat } = convertXYtoHSV(GAMUT_C.green.x, GAMUT_C.green.y, GAMUT_C);
+  t.is(sat, 255);
+});
+
+test("convertXYtoHSV reports sat=255 at the gamut blue corner (gamut-relative)", (t) => {
+  const { sat } = convertXYtoHSV(GAMUT_C.blue.x, GAMUT_C.blue.y, GAMUT_C);
+  t.is(sat, 255);
+});
+
+test("convertXYtoHSV reports sat=0 at D65 white when gamut provided", (t) => {
+  const { sat } = convertXYtoHSV(D65.x, D65.y, GAMUT_C);
+  t.is(sat, 0);
+});
+
+test("convertXYtoHSV gamut-relative sat is proportional to radial distance from D65", (t) => {
+  // 50% along D65 → red-corner ray should yield sat ≈ 128.
+  const mid = {
+    x: D65.x + 0.5 * (GAMUT_C.red.x - D65.x),
+    y: D65.y + 0.5 * (GAMUT_C.red.y - D65.y)
+  };
+  const { sat } = convertXYtoHSV(mid.x, mid.y, GAMUT_C);
+  t.true(Math.abs(sat - 128) <= 2, `sat at 50% radial: ${sat} vs ~128`);
+});
+
+test("convertXYtoHSV gamut-relative sat hits 255 on a non-axis-aligned hue (yellow edge)", (t) => {
+  // Midpoint of the red-green edge is a "yellow" on the gamut boundary. sRGB-HSV
+  // would under-report saturation here (bulb's yellow is off-axis from Wide RGB
+  // D65 yellow); gamut-relative should correctly return 255.
+  const edgePoint = {
+    x: (GAMUT_C.red.x + GAMUT_C.green.x) / 2,
+    y: (GAMUT_C.red.y + GAMUT_C.green.y) / 2
+  };
+  const { sat } = convertXYtoHSV(edgePoint.x, edgePoint.y, GAMUT_C);
+  // Tolerance because float rounding on the ray-edge intersection can tip sat
+  // one step below 255; anything ≥ 253 confirms gamut-relative is working.
+  t.true(sat >= 253, `sat at yellow edge: ${sat}`);
+});
+
 test("convertXYtoHSV handles different sectors", (t) => {
   // Use known primary/secondary colors in RGB
   // We'll use the reverse conversion to get XY values that should map to these
