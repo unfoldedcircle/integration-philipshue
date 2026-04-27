@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 _Changes in the next release_
 
+---
+
+## v0.3.3 - 2026-04-27
+
 ### Fixed
 
 - Color conversion (gamma decode + Wide RGB D65 matrix + gamut clipping) by @stakats and @henrikwidlund ([#127](https://github.com/unfoldedcircle/integration-philipshue/pull/127)).
@@ -17,8 +21,6 @@ _Changes in the next release_
 
 - Set default logging if the DEBUG environment variable is not set.
 - Dependency updates.
-
----
 
 ## v0.3.2 - 2026-04-13
 
