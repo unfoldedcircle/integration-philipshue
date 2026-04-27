@@ -64,11 +64,13 @@ Configuration files are read from and written to the path specified by `UC_CONFI
 
 Logging is handled via the [`debug`](https://www.npmjs.com/package/debug) module.
 
-To enable logging, set the `DEBUG` environment variable:
+To configure custom logging, run the driver with the `DEBUG` environment variable set like:
 
 ```shell
 DEBUG=uc_hue:* npm run start
 ```
+
+If the `DEBUG` environment variable is not set, the driver will use default log settings.
 
 Available log namespaces:
 

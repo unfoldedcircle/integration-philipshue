@@ -5,6 +5,7 @@
  * @license Mozilla Public License Version 2.0, see LICENSE for more details.
  */
 
+import debug from "debug";
 import PhilipsHue from "./lib/philips-hue.js";
 import log from "./log.js";
 import i18n from "i18n";
@@ -12,6 +13,10 @@ import path from "path";
 
 // Node.js 20.11 / 21.2
 const __dirname = import.meta.dirname;
+
+if (process.env.DEBUG === undefined) {
+  debug.enable("uc_hue:*,ucapi:info,ucapi:warn,ucapi:error");
+}
 
 i18n.configure({
   locales: ["en", "de", "fr"],

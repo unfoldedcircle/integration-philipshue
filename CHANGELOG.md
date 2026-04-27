@@ -15,6 +15,7 @@ _Changes in the next release_
 
 ### Changed
 
+- Set default logging if the DEBUG environment variable is not set.
 - Dependency updates.
 
 ---
