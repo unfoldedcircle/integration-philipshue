@@ -13,15 +13,36 @@ import {
   getGroupFeatures,
   getMostCommonGamut,
   getMinMaxMirek,
+  getRepresentativeGamutTriangle,
   delay,
   convertImageToBase64,
   i18all,
   isDeepEqual
 } from "../src/util.js";
 import { LightFeatures } from "@unfoldedcircle/integration-api";
-import { CombinedGroupResource, LightResource } from "../src/lib/hue-api/types.js";
+import { CombinedGroupResource, GamutTriangle, LightResource } from "../src/lib/hue-api/types.js";
 import fs from "fs";
 import i18n from "i18n";
+
+function cross(a: { x: number; y: number }, b: { x: number; y: number }) {
+  return a.x * b.y - a.y * b.x;
+}
+
+function isPointInTriangle(
+  point: { x: number; y: number },
+  tri: { red: { x: number; y: number }; green: { x: number; y: number }; blue: { x: number; y: number } }
+) {
+  const v1 = { x: tri.green.x - tri.red.x, y: tri.green.y - tri.red.y };
+  const v2 = { x: tri.blue.x - tri.red.x, y: tri.blue.y - tri.red.y };
+  const q = { x: point.x - tri.red.x, y: point.y - tri.red.y };
+  const denom = cross(v1, v2);
+  if (Math.abs(denom) <= 1e-9) {
+    return false;
+  }
+  const s = cross(q, v2) / denom;
+  const t = cross(v1, q) / denom;
+  return s >= 0 && t >= 0 && s + t <= 1;
+}
 
 // --- Brightness & Percent ---
 
@@ -96,70 +117,188 @@ test("colorTempToMirek handles invalid values", (t) => {
 // --- HSV & XY Conversions ---
 
 test("convertXYtoHSV handles zero values", (t) => {
-  // make sure y = 0 doesn't cause division by zero
-  t.notThrows(() => convertXYtoHSV(0.4, 0));
-  const result = convertXYtoHSV(0.4, 0);
-  t.is(typeof result.hue, "number");
-  t.is(typeof result.sat, "number");
-});
-
-test("convertXYtoHSV handles black/zero lightness", (t) => {
-  // make sure lightness = 0 doesn't cause division by zero
-  const result = convertXYtoHSV(0.4, 0.4, 0);
-  t.is(result.hue, 0);
-  t.is(result.sat, 0);
+  t.deepEqual(convertXYtoHSV(0.4, 0), { hue: 0, sat: 0 });
+  t.deepEqual(convertXYtoHSV(0.4, -0.1), { hue: 0, sat: 0 });
 });
 
 test("convertXYtoHSV and convertHSVtoXY round-trip (approximate)", (t) => {
   const x = 0.4;
   const y = 0.4;
   const hsv = convertXYtoHSV(x, y);
-  const xy = convertHSVtoXY(hsv.hue, hsv.sat, 1);
+  const xy = convertHSVtoXY(hsv.hue, hsv.sat);
 
   t.true(Math.abs(xy.x - x) < 0.1, `x: ${xy.x} vs ${x}`);
   t.true(Math.abs(xy.y - y) < 0.1, `y: ${xy.y} vs ${y}`);
 });
 
-test("convertHSVtoXY handles black (sum=0)", (t) => {
-  const xy = convertHSVtoXY(0, 0, 0);
-  t.is(xy.x, 0.3);
-  t.is(xy.y, 0.3);
+test("convertHSVtoXY normalizes wrapped hue values", (t) => {
+  const wrapped = convertHSVtoXY(-60, 255);
+  const expected = convertHSVtoXY(300, 255);
+
+  t.true(Math.abs(wrapped.x - expected.x) < 1e-6);
+  t.true(Math.abs(wrapped.y - expected.y) < 1e-6);
+});
+
+test("convertHSVtoXY clamps saturation inputs to the valid range", (t) => {
+  const expectedGray = convertHSVtoXY(120, 0);
+  const clampedLowSat = convertHSVtoXY(120, -10);
+  t.deepEqual(clampedLowSat, expectedGray);
+
+  const expectedFullSat = convertHSVtoXY(120, 255);
+  const clampedHighSat = convertHSVtoXY(120, 999);
+  t.deepEqual(clampedHighSat, expectedFullSat);
+});
+
+test("convertXYtoHSV keeps grayscale colors unsaturated", (t) => {
+  const xyWhite = convertHSVtoXY(42, 0);
+  const hsvWhite = convertXYtoHSV(xyWhite.x, xyWhite.y);
+
+  t.is(hsvWhite.sat, 0);
+});
+
+test("color conversion handles invalid numeric input safely", (t) => {
+  t.deepEqual(convertXYtoHSV(NaN, 0.3), { hue: 0, sat: 0 });
+  t.deepEqual(convertXYtoHSV(0.3, Infinity), { hue: 0, sat: 0 });
+  t.deepEqual(convertHSVtoXY(NaN, 255), { x: 0.3, y: 0.3 });
+  t.deepEqual(convertHSVtoXY(0, Infinity), { x: 0.3, y: 0.3 });
+});
+
+test("convertHSVtoXY and convertXYtoHSV keep partially saturated colors close", (t) => {
+  const source = { hue: 210, sat: 120 };
+  const xy = convertHSVtoXY(source.hue, source.sat);
+  const restored = convertXYtoHSV(xy.x, xy.y);
+  const hueDelta = Math.min(Math.abs(restored.hue - source.hue), 360 - Math.abs(restored.hue - source.hue));
+
+  t.true(hueDelta <= 8, `hue: ${restored.hue} vs ${source.hue}`);
+  t.true(Math.abs(restored.sat - source.sat) <= 20, `sat: ${restored.sat} vs ${source.sat}`);
+});
+
+// Gamut B triangle (Hue bulb gen 1)
+const GAMUT_B: GamutTriangle = {
+  red: { x: 0.675, y: 0.322 },
+  green: { x: 0.409, y: 0.518 },
+  blue: { x: 0.167, y: 0.04 }
+};
+
+test("convertHSVtoXY clips out-of-gamut colors when gamut is provided", (t) => {
+  const unclipped = convertHSVtoXY(120, 255);
+  const clipped = convertHSVtoXY(120, 255, GAMUT_B);
+
+  t.false(isPointInTriangle(unclipped, GAMUT_B));
+  t.true(isPointInTriangle(clipped, GAMUT_B));
+  t.true(Math.abs(unclipped.x - clipped.x) > 1e-4 || Math.abs(unclipped.y - clipped.y) > 1e-4);
+});
+
+test("convertXYtoHSV clips out-of-gamut xy before converting when gamut is provided", (t) => {
+  const outOfGamut = { x: 0.17, y: 0.7 };
+  const clipped = convertHSVtoXY(120, 255, GAMUT_B);
+  const convertedFromOutOfGamut = convertXYtoHSV(outOfGamut.x, outOfGamut.y, GAMUT_B);
+  const convertedFromClipped = convertXYtoHSV(clipped.x, clipped.y, GAMUT_B);
+
+  t.true(Math.abs(convertedFromOutOfGamut.hue - convertedFromClipped.hue) <= 1);
+  t.true(Math.abs(convertedFromOutOfGamut.sat - convertedFromClipped.sat) <= 1);
+});
+
+test("invalid gamut input keeps legacy conversion behavior", (t) => {
+  const invalidGamut = {
+    red: { x: 0, y: 0 },
+    green: { x: 0.5, y: 0.5 },
+    blue: { x: 1, y: 1 }
+  };
+  const baseline = convertHSVtoXY(240, 255);
+  const withInvalidGamut = convertHSVtoXY(240, 255, invalidGamut);
+
+  t.deepEqual(withInvalidGamut, baseline);
+});
+
+// Gamut C triangle (most modern Hue bulbs) for gamut-relative saturation tests.
+const GAMUT_C: GamutTriangle = {
+  red: { x: 0.6915, y: 0.3038 },
+  green: { x: 0.17, y: 0.7 },
+  blue: { x: 0.1532, y: 0.0475 }
+};
+const D65 = { x: 0.3127, y: 0.329 };
+
+test("convertXYtoHSV reports sat=255 at the gamut red corner (gamut-relative)", (t) => {
+  // sRGB-HSV returns ≈243 here because the bulb's red corner is off-axis from
+  // the Wide-RGB-D65 red primary. Gamut-relative should return 255.
+  const { sat } = convertXYtoHSV(GAMUT_C.red.x, GAMUT_C.red.y, GAMUT_C);
+  t.is(sat, 255);
+});
+
+test("convertXYtoHSV reports sat=255 at the gamut green corner (gamut-relative)", (t) => {
+  const { sat } = convertXYtoHSV(GAMUT_C.green.x, GAMUT_C.green.y, GAMUT_C);
+  t.is(sat, 255);
+});
+
+test("convertXYtoHSV reports sat=255 at the gamut blue corner (gamut-relative)", (t) => {
+  const { sat } = convertXYtoHSV(GAMUT_C.blue.x, GAMUT_C.blue.y, GAMUT_C);
+  t.is(sat, 255);
+});
+
+test("convertXYtoHSV reports sat=0 at D65 white when gamut provided", (t) => {
+  const { sat } = convertXYtoHSV(D65.x, D65.y, GAMUT_C);
+  t.is(sat, 0);
+});
+
+test("convertXYtoHSV gamut-relative sat is proportional to radial distance from D65", (t) => {
+  // 50% along D65 → red-corner ray should yield sat ≈ 128.
+  const mid = {
+    x: D65.x + 0.5 * (GAMUT_C.red.x - D65.x),
+    y: D65.y + 0.5 * (GAMUT_C.red.y - D65.y)
+  };
+  const { sat } = convertXYtoHSV(mid.x, mid.y, GAMUT_C);
+  t.true(Math.abs(sat - 128) <= 2, `sat at 50% radial: ${sat} vs ~128`);
+});
+
+test("convertXYtoHSV gamut-relative sat hits 255 on a non-axis-aligned hue (yellow edge)", (t) => {
+  // Midpoint of the red-green edge is a "yellow" on the gamut boundary. sRGB-HSV
+  // would under-report saturation here (bulb's yellow is off-axis from Wide RGB
+  // D65 yellow); gamut-relative should correctly return 255.
+  const edgePoint = {
+    x: (GAMUT_C.red.x + GAMUT_C.green.x) / 2,
+    y: (GAMUT_C.red.y + GAMUT_C.green.y) / 2
+  };
+  const { sat } = convertXYtoHSV(edgePoint.x, edgePoint.y, GAMUT_C);
+  // Tolerance because float rounding on the ray-edge intersection can tip sat
+  // one step below 255; anything ≥ 253 confirms gamut-relative is working.
+  t.true(sat >= 253, `sat at yellow edge: ${sat}`);
 });
 
 test("convertXYtoHSV handles different sectors", (t) => {
   // Use known primary/secondary colors in RGB
   // We'll use the reverse conversion to get XY values that should map to these
 
-  // Red (H=0, S=255, V=1) -> XY
-  const xyRed = convertHSVtoXY(0, 255, 1);
+  // Red (H=0, S=255) -> XY
+  const xyRed = convertHSVtoXY(0, 255);
   const hsvRed = convertXYtoHSV(xyRed.x, xyRed.y);
   t.true(hsvRed.hue === 0 || hsvRed.hue === 359 || hsvRed.hue === 360);
   t.is(hsvRed.sat, 255);
 
-  // Green (H=120, S=255, V=1) -> XY
-  const xyGreen = convertHSVtoXY(120, 255, 1);
+  // Green (H=120, S=255) -> XY
+  const xyGreen = convertHSVtoXY(120, 255);
   const hsvGreen = convertXYtoHSV(xyGreen.x, xyGreen.y);
   t.is(hsvGreen.hue, 120);
   t.is(hsvGreen.sat, 255);
 
-  // Blue (H=240, S=255, V=1) -> XY
-  const xyBlue = convertHSVtoXY(240, 255, 1);
+  // Blue (H=240, S=255) -> XY
+  const xyBlue = convertHSVtoXY(240, 255);
   const hsvBlue = convertXYtoHSV(xyBlue.x, xyBlue.y);
   t.is(hsvBlue.hue, 240);
   t.is(hsvBlue.sat, 255);
 
-  // Yellow (H=60, S=255, V=1) -> XY
-  const xyYellow = convertHSVtoXY(60, 255, 1);
+  // Yellow (H=60, S=255) -> XY
+  const xyYellow = convertHSVtoXY(60, 255);
   const hsvYellow = convertXYtoHSV(xyYellow.x, xyYellow.y);
   t.is(hsvYellow.hue, 60);
 
-  // Cyan (H=180, S=255, V=1) -> XY
-  const xyCyan = convertHSVtoXY(180, 255, 1);
+  // Cyan (H=180, S=255) -> XY
+  const xyCyan = convertHSVtoXY(180, 255);
   const hsvCyan = convertXYtoHSV(xyCyan.x, xyCyan.y);
   t.is(hsvCyan.hue, 180);
 
-  // Magenta (H=300, S=255, V=1) -> XY
-  const xyMagenta = convertHSVtoXY(300, 255, 1);
+  // Magenta (H=300, S=255) -> XY
+  const xyMagenta = convertHSVtoXY(300, 255);
   const hsvMagenta = convertXYtoHSV(xyMagenta.x, xyMagenta.y);
   t.is(hsvMagenta.hue, 300);
 });
@@ -260,6 +399,33 @@ test("getMostCommonGamut returns undefined if no gamut", (t) => {
     lights: [{}]
   } as unknown as CombinedGroupResource;
   t.is(getMostCommonGamut(group), undefined);
+});
+
+test("getRepresentativeGamutTriangle returns gamut from most common gamut_type light", (t) => {
+  const gamut: GamutTriangle = {
+    red: { x: 0.675, y: 0.322 },
+    green: { x: 0.409, y: 0.518 },
+    blue: { x: 0.167, y: 0.04 }
+  };
+  const group = {
+    lights: [
+      {
+        color: {
+          gamut_type: "A",
+          gamut: { red: { x: 0.704, y: 0.296 }, green: { x: 0.2151, y: 0.7106 }, blue: { x: 0.138, y: 0.08 } }
+        }
+      },
+      { color: { gamut_type: "B", gamut } },
+      { color: { gamut_type: "B", gamut } }
+    ]
+  } as unknown as CombinedGroupResource;
+  const result = getRepresentativeGamutTriangle(group);
+  t.deepEqual(result, gamut);
+});
+
+test("getRepresentativeGamutTriangle returns undefined when no gamut data", (t) => {
+  const group = { lights: [{}] } as unknown as CombinedGroupResource;
+  t.is(getRepresentativeGamutTriangle(group), undefined);
 });
 
 test("getMinMaxMirek returns min/max from all lights", (t) => {

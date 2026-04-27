@@ -10,10 +10,14 @@ import EventEmitter from "node:events";
 import fs from "fs";
 import path from "path";
 import log from "./log.js";
-import { GamutType, GroupType } from "./lib/hue-api/types.js";
+import { GamutTriangle, GamutType, GroupType } from "./lib/hue-api/types.js";
 import { isDeepEqual } from "./util.js";
 
-const CFG_VERSION = 2;
+// v1 → v2: migration from the Hue CLIP v1 API to CLIP v2.
+// v2 → v3: added per-light `gamut` triangle for accurate client-side clipping;
+//   migration removes existing light entries and refetches from the bridge so
+//   `gamut` is populated from the authoritative CLIP v2 response.
+const CFG_VERSION = 3;
 const V1_CFG_FILENAME = "config.json";
 const CFG_FILENAME = "philips_hue_config.json";
 
@@ -22,6 +26,7 @@ export interface LightConfig {
   name: string;
   features: LightFeatures[];
   gamut_type?: GamutType;
+  gamut?: GamutTriangle;
   mirek_schema?: { mirek_minimum: number; mirek_maximum: number };
 }
 export interface GroupConfig extends Omit<LightConfig, "id_v1"> {

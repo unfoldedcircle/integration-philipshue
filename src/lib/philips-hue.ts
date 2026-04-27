@@ -101,7 +101,7 @@ class PhilipsHue {
       return;
     }
     this.migrating = true;
-    log.info("Migrating v1 config to new format. This requires a connection to the Hub.");
+    log.info("Migrating config to latest format. This requires a connection to the Hub.");
 
     try {
       let retries = 0;
@@ -330,7 +330,7 @@ class PhilipsHue {
     const results = new Set(
       await Promise.all(
         entityIds.map(async (entityId) => {
-          return await this.handleSingleLightCmd(entity, entityId, command, isGroup, params);
+          return await this.handleSingleLightCmd(entity, entityId, entityConfig, command, isGroup, params);
         })
       )
     );
@@ -347,6 +347,7 @@ class PhilipsHue {
   private async handleSingleLightCmd(
     entity: Entity,
     entityId: string,
+    entityConfig: LightOrGroupConfig,
     command: string,
     isGroup: boolean,
     params?: { [key: string]: string | number | boolean }
@@ -392,9 +393,13 @@ class PhilipsHue {
             }
           }
           if (params?.hue !== undefined && params?.saturation !== undefined) {
-            const currentB = Number(entity.attributes?.[LightAttributes.Brightness]);
-            const v = Number.isFinite(currentB) ? Math.max(0, Math.min(currentB, 255)) / 255 : 1;
-            req.color = { xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), v) };
+            // CLIP v2 treats chromaticity (color.xy) and luminance (dimming.brightness)
+            // as orthogonal. Coupling the bulb's current brightness into HSV→xy would
+            // shift the computed xy non-linearly via the sRGB gamma step — we rely on
+            // a separate dimming command instead.
+            req.color = {
+              xy: convertHSVtoXY(Number(params.hue), Number(params.saturation), entityConfig.gamut)
+            };
           }
           await this.hueApi.lightResource.updateLightState(v2EntityId, req, !isGroup);
           break;
@@ -487,6 +492,7 @@ class PhilipsHue {
               name: data.metadata.name as string,
               features: lightConfig.features,
               gamut_type: lightConfig.gamut_type,
+              gamut: lightConfig.gamut,
               mirek_schema: lightConfig.mirek_schema
             });
           }
@@ -749,7 +755,8 @@ class PhilipsHue {
     }
 
     if (light.color && light.color.xy) {
-      const { hue, sat } = convertXYtoHSV(light.color.xy.x, light.color.xy.y, light.dimming?.brightness);
+      const config = this.config.getLight(v2Id);
+      const { hue, sat } = convertXYtoHSV(light.color.xy.x, light.color.xy.y, light.color.gamut ?? config?.gamut);
       lightState[LightAttributes.Hue] = hue;
       lightState[LightAttributes.Saturation] = sat;
     }
@@ -804,7 +811,8 @@ class PhilipsHue {
     const color =
       groupedLights?.find((groupLight) => groupLight.color?.xy) ?? group.lights?.find((light) => light.color?.xy);
     if (color?.color && color.color.xy) {
-      const { hue, sat } = convertXYtoHSV(color.color.xy.x, color.color.xy.y, color.dimming?.brightness);
+      const config = this.config.getLight(entityId);
+      const { hue, sat } = convertXYtoHSV(color.color.xy.x, color.color.xy.y, color.color.gamut ?? config?.gamut);
       groupState[LightAttributes.Hue] = hue;
       groupState[LightAttributes.Saturation] = sat;
     }
