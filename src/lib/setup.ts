@@ -20,8 +20,9 @@ import { Bonjour } from "bonjour-service";
 import Config from "../config.js";
 import log from "../log.js";
 import {
-  addAvailableLights,
   addAvailableGroups,
+  addAvailableLights,
+  addAvailableScenes,
   convertImageToBase64,
   delay,
   getHubUrl,
@@ -313,6 +314,13 @@ class PhilipsHueSetup {
         const zoneData = await api.groupResource.getGroupResources("zone");
         if (zoneData.length > 0) {
           addAvailableGroups(zoneData, "zone", this.config);
+        }
+
+        // Scenes must come after groups: addAvailableScenes denormalises groupName from
+        // the already-cached group config (see util.ts:addAvailableScenes).
+        const sceneData = await api.sceneResource.getScenes();
+        if (sceneData.length > 0) {
+          addAvailableScenes(sceneData, this.config);
         }
 
         return new SetupComplete();

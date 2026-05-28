@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-_Changes in the next release_
+### Added
+
+- Each Hue room/zone with scenes is exposed as a `Select` entity; `current_option` tracks the active scene via SSE ([#134](https://github.com/unfoldedcircle/integration-philipshue/pull/134)).
+
+### Changed
+
+- Configuration version bumped from 3 to 4; the migration now also fetches scenes ([#134](https://github.com/unfoldedcircle/integration-philipshue/pull/134)).
 
 ---
 

@@ -17,7 +17,9 @@ import { isDeepEqual } from "./util.js";
 // v2 → v3: added per-light `gamut` triangle for accurate client-side clipping;
 //   migration removes existing light entries and refetches from the bridge so
 //   `gamut` is populated from the authoritative CLIP v2 response.
-const CFG_VERSION = 3;
+// v3 → v4: added persisted scene records; migration fetches `/resource/scene`
+//   alongside lights, rooms, and zones to populate the new `scenes` map.
+const CFG_VERSION = 4;
 const V1_CFG_FILENAME = "config.json";
 const CFG_FILENAME = "philips_hue_config.json";
 
@@ -36,18 +38,27 @@ export interface GroupConfig extends Omit<LightConfig, "id_v1"> {
 }
 export type LightOrGroupConfig = LightConfig | GroupConfig;
 
+export interface SceneConfig {
+  name: string;
+  groupId: string;
+  groupRtype: "room" | "zone";
+  groupName: string | undefined;
+}
+
 interface PhilipsHueConfig {
   cfg_version?: number;
   hub?: { name: string; ip: string; username: string; bridgeId: string };
   lights: { [key: string]: LightOrGroupConfig };
+  scenes?: { [key: string]: SceneConfig };
 }
 
 export type ConfigEvent =
   | { type: "light-added"; data: LightOrGroupConfig & { id: string } }
-  | { type: "light-updated"; data: LightOrGroupConfig & { id: string } };
+  | { type: "light-updated"; data: LightOrGroupConfig & { id: string } }
+  | { type: "scene-added"; data: SceneConfig & { id: string } };
 
 class Config extends EventEmitter {
-  private config: PhilipsHueConfig = { lights: {} };
+  private config: PhilipsHueConfig = { lights: {}, scenes: {} };
   private readonly configDir: string;
   private readonly cb?: (event: ConfigEvent) => void;
 
@@ -133,12 +144,54 @@ class Config extends EventEmitter {
     return this.config.lights[id];
   }
 
+  public addScene(id: string, scene: SceneConfig) {
+    this.scenesMap()[id] = scene;
+    this.saveToFile();
+    if (this.cb) {
+      this.cb({ type: "scene-added", data: { id, ...scene } });
+    }
+  }
+
+  public getScene(id: string): SceneConfig | undefined {
+    return this.scenesMap()[id];
+  }
+
+  public getScenes(): (SceneConfig & { id: string })[] {
+    return Object.entries(this.scenesMap()).map(([id, scene]) => ({ id, ...scene }));
+  }
+
+  public updateScene(id: string, scene: SceneConfig) {
+    const scenes = this.scenesMap();
+    if (scenes[id] && isDeepEqual(scenes[id], scene)) {
+      return;
+    }
+    scenes[id] = scene;
+    this.saveToFile();
+  }
+
+  public removeScene(id: string) {
+    delete this.scenesMap()[id];
+    this.saveToFile();
+  }
+
+  public removeScenes() {
+    this.config.scenes = {};
+    this.saveToFile();
+  }
+
+  private scenesMap(): { [key: string]: SceneConfig } {
+    if (!this.config.scenes) {
+      this.config.scenes = {};
+    }
+    return this.config.scenes;
+  }
+
   /**
    * Remove the Hue hub. Since only one hub is supported, the configuration is cleared.
    */
   public removeHub() {
     const bridgeId = this.config.hub?.bridgeId;
-    this.config = { cfg_version: CFG_VERSION, lights: {} };
+    this.config = { cfg_version: CFG_VERSION, lights: {}, scenes: {} };
     this.saveToFile();
     if (bridgeId) {
       this.emit("remove", bridgeId);
@@ -149,7 +202,7 @@ class Config extends EventEmitter {
    * Clear the hub and light configuration.
    */
   public clear() {
-    this.config = { cfg_version: CFG_VERSION, lights: {} };
+    this.config = { cfg_version: CFG_VERSION, lights: {}, scenes: {} };
     this.saveToFile();
     this.emit("remove", null);
   }

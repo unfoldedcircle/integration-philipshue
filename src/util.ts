@@ -7,10 +7,27 @@
 
 import { LightFeatures } from "@unfoldedcircle/integration-api";
 import fs from "fs";
-import { CombinedGroupResource, GamutTriangle, GamutType, GroupType, LightResource } from "./lib/hue-api/types.js";
+import {
+  CombinedGroupResource,
+  CombinedSceneResource,
+  GamutTriangle,
+  GamutType,
+  GroupType,
+  LightResource
+} from "./lib/hue-api/types.js";
 import i18n from "i18n";
 import log from "./log.js";
-import Config, { GroupConfig, LightConfig } from "./config.js";
+import Config, { GroupConfig, LightConfig, SceneConfig } from "./config.js";
+
+/**
+ * Placeholder option shown when no scene is active in a group.
+ *
+ * The Select entity contract requires `current_option` to be one of the strings in
+ * `options`, so we always include this marker at the top of every per-group scene
+ * Select. Selecting it is a no-op (no bridge call) — it only ever appears as the
+ * UI state when the bridge reports no scene active for the group.
+ */
+export const SCENE_NONE_OPTION = "—";
 
 export function convertImageToBase64(file: string) {
   let data;
@@ -63,6 +80,61 @@ export function addAvailableGroups(groups: CombinedGroupResource[], groupType: G
       mirek_schema: getMinMaxMirek(group)
     } as GroupConfig);
   });
+}
+
+export function addAvailableScenes(scenes: CombinedSceneResource[], config: Config) {
+  scenes.forEach((scene) => {
+    if (config.getScene(scene.id)) {
+      log.info("Scene with id %s already exists in config, skipping", scene.id);
+      return;
+    }
+    // Resolve the owning group's display name from already-cached config — saves a room+zone
+    // fetch on every scene event. Orphan scenes (group deleted) get undefined, same as before.
+    config.addScene(scene.id, {
+      name: scene.name,
+      groupId: scene.group.rid,
+      groupRtype: scene.group.rtype,
+      groupName: config.getLight(scene.group.rid)?.name
+    });
+  });
+}
+
+/**
+ * Build the option labels and lookup maps for a single group's scene Select entity.
+ *
+ * The returned `options` array holds the group's scenes sorted alphabetically by name
+ * (case-insensitive). Scenes with duplicate names get ` (2)`, ` (3)` suffixes — Hue allows
+ * duplicate scene names within a group, but `current_option` is a string and must be unique
+ * to disambiguate, so we deterministically suffix in iteration order.
+ *
+ * This helper deliberately does **not** include {@link SCENE_NONE_OPTION}. The "no scene
+ * active" placeholder is inserted by the caller only when it actually represents current
+ * state — so it disappears from the dropdown whenever a real scene is active.
+ *
+ * Returns both directions of the option ↔ scene-id mapping so the SSE handlers (sceneId →
+ * option) and the command handler (option → sceneId) can each do their lookup in O(1).
+ */
+export function buildSceneOptionsForGroup(scenes: (SceneConfig & { id: string })[]): {
+  options: string[];
+  optionToId: Map<string, string>;
+  idToOption: Map<string, string>;
+} {
+  const optionToId = new Map<string, string>();
+  const idToOption = new Map<string, string>();
+  const options: string[] = [];
+
+  const sorted = [...scenes].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  const seen = new Map<string, number>();
+  for (const scene of sorted) {
+    const base = scene.name;
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    const label = count === 1 ? base : `${base} (${count})`;
+    options.push(label);
+    optionToId.set(label, scene.id);
+    idToOption.set(scene.id, label);
+  }
+  return { options, optionToId, idToOption };
 }
 
 export function getLightFeatures(light: LightResource): LightFeatures[] {

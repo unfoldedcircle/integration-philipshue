@@ -1,6 +1,7 @@
 import test from "ava";
 import {
   brightnessToPercent,
+  buildSceneOptionsForGroup,
   colorTempToMirek,
   convertHSVtoXY,
   convertXYtoHSV,
@@ -17,8 +18,10 @@ import {
   delay,
   convertImageToBase64,
   i18all,
-  isDeepEqual
+  isDeepEqual,
+  SCENE_NONE_OPTION
 } from "../src/util.js";
+import { SceneConfig } from "../src/config.js";
 import { LightFeatures } from "@unfoldedcircle/integration-api";
 import { CombinedGroupResource, GamutTriangle, LightResource } from "../src/lib/hue-api/types.js";
 import fs from "fs";
@@ -550,4 +553,48 @@ test("isDeepEqual handles undefined as non-existing", (t) => {
   t.true(isDeepEqual({ a: 1, b: undefined }, { a: 1 }));
   t.true(isDeepEqual({ a: 1, b: undefined }, { a: 1, c: undefined }));
   t.false(isDeepEqual({ a: 1 }, { a: 1, b: null }));
+});
+
+function makeScene(id: string, name: string, groupId = "g1"): SceneConfig & { id: string } {
+  return { id, name, groupId, groupRtype: "room", groupName: "Living Room" };
+}
+
+test("buildSceneOptionsForGroup returns an empty options array for an empty group", (t) => {
+  const result = buildSceneOptionsForGroup([]);
+  t.deepEqual(result.options, []);
+  t.is(result.optionToId.size, 0);
+  t.is(result.idToOption.size, 0);
+});
+
+test("buildSceneOptionsForGroup sorts scenes alphabetically without prepending a placeholder", (t) => {
+  const scenes = [makeScene("s1", "Bright"), makeScene("s2", "Cozy"), makeScene("s3", "Ambient")];
+  const result = buildSceneOptionsForGroup(scenes);
+  t.deepEqual(result.options, ["Ambient", "Bright", "Cozy"]);
+  t.false(result.options.includes(SCENE_NONE_OPTION), "placeholder is not embedded in helper output");
+  t.is(result.optionToId.get("Ambient"), "s3");
+  t.is(result.optionToId.get("Bright"), "s1");
+  t.is(result.optionToId.get("Cozy"), "s2");
+});
+
+test("buildSceneOptionsForGroup sorts case-insensitively", (t) => {
+  const scenes = [makeScene("s1", "bright"), makeScene("s2", "Ambient"), makeScene("s3", "Cozy")];
+  const result = buildSceneOptionsForGroup(scenes);
+  t.deepEqual(result.options, ["Ambient", "bright", "Cozy"]);
+});
+
+test("buildSceneOptionsForGroup suffixes duplicate scene names with (2), (3)", (t) => {
+  const scenes = [makeScene("s1", "Movie Night"), makeScene("s2", "Movie Night"), makeScene("s3", "Movie Night")];
+  const result = buildSceneOptionsForGroup(scenes);
+  t.deepEqual(result.options, ["Movie Night", "Movie Night (2)", "Movie Night (3)"]);
+  t.is(result.optionToId.get("Movie Night"), "s1");
+  t.is(result.optionToId.get("Movie Night (2)"), "s2");
+  t.is(result.optionToId.get("Movie Night (3)"), "s3");
+});
+
+test("buildSceneOptionsForGroup builds matching forward and reverse maps", (t) => {
+  const scenes = [makeScene("s1", "Bright"), makeScene("s2", "Bright")];
+  const result = buildSceneOptionsForGroup(scenes);
+  for (const [option, sceneId] of result.optionToId) {
+    t.is(result.idToOption.get(sceneId), option);
+  }
 });

@@ -379,6 +379,32 @@ export interface CombinedGroupResource {
   };
 }
 
+export interface SceneResource {
+  id: string;
+  type: "scene";
+  metadata: { name: string };
+  group: ResourceIdentifier;
+  status?: { active: "inactive" | "static" | "dynamic_palette" };
+}
+
+export interface SceneResourceResult {
+  errors: { description: string }[];
+  data: SceneResource[];
+}
+
+export type SceneRecallResponse = LightResourceResponse;
+
+/**
+ * Bare scene fields the driver cares about. Group display name is *not* resolved here —
+ * callers denormalise it from the integration's already-cached group config to avoid a
+ * room+zone fetch on every single-scene SSE event.
+ */
+export interface CombinedSceneResource {
+  id: string;
+  name: string;
+  group: { rid: string; rtype: "room" | "zone" };
+}
+
 export type GamutType = "A" | "B" | "C";
 
 /** CIE xy chromaticity coordinates for each primary of a light's color gamut triangle. */

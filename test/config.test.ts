@@ -1,5 +1,5 @@
 import test, { ExecutionContext, TestFn } from "ava";
-import Config, { LightOrGroupConfig } from "../src/config.js";
+import Config, { LightOrGroupConfig, SceneConfig } from "../src/config.js";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -139,3 +139,84 @@ configTest(
     }
   }
 );
+
+configTest("addScene then getScenes round-trips all SceneConfig fields", (t: ExecutionContext<TestContext>) => {
+  const config = new Config(t.context.tmpDir);
+  const sceneId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const scene: SceneConfig = {
+    name: "Sunset",
+    groupId: "11111111-1111-1111-1111-111111111111",
+    groupRtype: "room",
+    groupName: "Living Room"
+  };
+
+  config.addScene(sceneId, scene);
+
+  t.deepEqual(config.getScene(sceneId), scene);
+
+  const all = config.getScenes();
+  t.is(all.length, 1);
+  t.deepEqual(all[0], { id: sceneId, ...scene });
+});
+
+configTest("updateScene short-circuits when content is identical", (t: ExecutionContext<TestContext>) => {
+  const config = new Config(t.context.tmpDir);
+  const sceneId = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const scene: SceneConfig = {
+    name: "Sunset",
+    groupId: "11111111-1111-1111-1111-111111111111",
+    groupRtype: "room",
+    groupName: "Living Room"
+  };
+
+  config.addScene(sceneId, scene);
+
+  const originalWriteFileSync = fs.writeFileSync;
+  let writeCount = 0;
+  fs.writeFileSync = (
+    p: string | number | URL | Buffer,
+    data: string | NodeJS.ArrayBufferView,
+    options?: fs.WriteFileOptions
+  ) => {
+    if (typeof p === "string" && p.includes("philips_hue_config.json")) {
+      writeCount++;
+    }
+    return originalWriteFileSync(p, data, options);
+  };
+
+  try {
+    config.updateScene(sceneId, { ...scene });
+    t.is(writeCount, 0, "Should not write when SceneConfig is unchanged");
+
+    config.updateScene(sceneId, { ...scene, name: "Sunset Glow" });
+    t.is(writeCount, 1, "Should write when scene name changes");
+
+    writeCount = 0;
+    config.updateScene(sceneId, { ...scene, name: "Sunset Glow", groupName: "Den" });
+    t.is(writeCount, 1, "Should write when groupName changes");
+  } finally {
+    fs.writeFileSync = originalWriteFileSync;
+  }
+});
+
+configTest("removeScene removes the entry; removeScenes wipes the map", (t: ExecutionContext<TestContext>) => {
+  const config = new Config(t.context.tmpDir);
+  const a = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+  const b = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+  const base: Omit<SceneConfig, "name"> = {
+    groupId: "11111111-1111-1111-1111-111111111111",
+    groupRtype: "room",
+    groupName: "Living Room"
+  };
+
+  config.addScene(a, { name: "Sunset", ...base });
+  config.addScene(b, { name: "Movie", ...base });
+  t.is(config.getScenes().length, 2);
+
+  config.removeScene(a);
+  t.is(config.getScene(a), undefined);
+  t.is(config.getScenes().length, 1);
+
+  config.removeScenes();
+  t.deepEqual(config.getScenes(), []);
+});

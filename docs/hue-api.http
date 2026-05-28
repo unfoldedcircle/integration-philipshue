@@ -39,6 +39,57 @@ hue-application-key: {{hue_api_key}}
 GET {{hue_bridge_url}}/clip/v2/resource/scene HTTP/1.1
 hue-application-key: {{hue_api_key}}
 
+> {%
+    // Extract the first scene ID for the next requests.
+    // To use it in the future, manually save it in `hue_scene_id` of your ###.env.json file.
+    client.test("Extract first scene", function() {
+        const body = response.body;
+
+        client.assert(body && Array.isArray(body.data) && body.data.length > 0, "No data found in response");
+
+        const firstScene = body.data.find(item => item.type === "scene");
+        client.assert(firstScene, "No resource with type 'scene' found in the data array");
+
+        client.global.set("hue_scene_id", firstScene.id);
+        client.log("Selected Scene ID: " + client.global.get("hue_scene_id"));
+    });
+%}
+
+### get a specific scene
+GET {{hue_bridge_url}}/clip/v2/resource/scene/{{hue_scene_id}} HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+### recall (activate) a scene
+### Bridge auto-starts dynamics when the scene has auto_dynamic: true.
+PUT {{hue_bridge_url}}/clip/v2/resource/scene/{{hue_scene_id}} HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+{
+  "recall": {
+    "action": "active"
+  }
+}
+
+### start the dynamic palette on the active scene
+PUT {{hue_bridge_url}}/clip/v2/resource/scene/{{hue_scene_id}} HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+{
+  "recall": {
+    "action": "dynamic_palette"
+  }
+}
+
+### stop the dynamic palette and freeze the scene at its current state
+PUT {{hue_bridge_url}}/clip/v2/resource/scene/{{hue_scene_id}} HTTP/1.1
+hue-application-key: {{hue_api_key}}
+
+{
+  "recall": {
+    "action": "static"
+  }
+}
+
 ### get rooms
 ### Rooms group devices and each device can only be part of one room.
 GET {{hue_bridge_url}}/clip/v2/resource/room HTTP/1.1
