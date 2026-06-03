@@ -15,14 +15,20 @@ import {
   LightCommands,
   LightFeatures,
   LightStates,
+  Select,
+  SelectAttributes,
+  SelectCommands,
+  SelectStates,
   StatusCodes
 } from "@unfoldedcircle/integration-api";
-import Config, { ConfigEvent, GroupConfig, LightOrGroupConfig } from "../config.js";
+import Config, { ConfigEvent, GroupConfig, LightOrGroupConfig, SceneConfig } from "../config.js";
 import log from "../log.js";
 import {
   addAvailableGroups,
   addAvailableLights,
+  addAvailableScenes,
   brightnessToPercent,
+  buildSceneOptionsForGroup,
   colorTempToMirek,
   convertHSVtoXY,
   convertXYtoHSV,
@@ -33,12 +39,15 @@ import {
   getMinMaxMirek,
   getMostCommonGamut,
   mirekToColorTemp,
-  percentToBrightness
+  percentToBrightness,
+  SCENE_NONE_OPTION
 } from "../util.js";
 import HueApi, { HueError } from "./hue-api/api.js";
 import HueEventStream from "./hue-api/event-stream.js";
 import { CombinedGroupResource, HueEvent, LightResource, LightResourceParams } from "./hue-api/types.js";
 import PhilipsHueSetup from "./setup.js";
+
+const SCENE_SELECT_PREFIX = "hue_scenes_";
 
 const MIGRATION_MAX_RETRIES = 6;
 const MIGRATION_INITIAL_RETRY_DELAY_MS = 1000;
@@ -58,6 +67,13 @@ class PhilipsHue {
   private v1LightIds: Set<string> = new Set();
   // migration guard flag
   private migrating = false;
+  // Per-group scene Select state. Each group with scenes gets one Select entity named
+  // "<Group> scenes"; these maps translate between the option label shown to the user
+  // and the underlying Hue scene id. Forward map is keyed by groupId so we can wholesale
+  // rebuild a group's Select on scene add/remove/rename; reverse map is keyed by sceneId
+  // so SSE handlers (status.active transitions) can find the option in O(1).
+  private sceneOptionToId: Map<string, Map<string, string>> = new Map();
+  private sceneIdToOption: Map<string, { groupId: string; option: string }> = new Map();
 
   constructor() {
     this.uc = new IntegrationAPI();
@@ -121,6 +137,12 @@ class PhilipsHue {
             addAvailableGroups(zoneData, "zone", this.config);
           }
 
+          const scenes = await this.hueApi.sceneResource.getScenes();
+          this.config.removeScenes();
+          if (scenes.length > 0) {
+            addAvailableScenes(scenes, this.config);
+          }
+
           this.updateEntityIndexes();
           this.config.markMigrated();
           this.migrating = false;
@@ -172,6 +194,33 @@ class PhilipsHue {
         features: light.features
       });
       this.addAvailableLight(lightEntity);
+    }
+    this.rebuildAllSceneSelects();
+  }
+
+  /**
+   * (Re)build a Select entity for every group that has at least one configured scene.
+   *
+   * Groups without scenes get no entity (and any pre-existing Select is removed).
+   */
+  private rebuildAllSceneSelects() {
+    const scenesByGroup = new Map<string, (SceneConfig & { id: string })[]>();
+    for (const scene of this.config.getScenes()) {
+      const bucket = scenesByGroup.get(scene.groupId);
+      if (bucket) {
+        bucket.push(scene);
+      } else {
+        scenesByGroup.set(scene.groupId, [scene]);
+      }
+    }
+    // Remove Select entities for groups that no longer have scenes
+    for (const groupId of this.sceneOptionToId.keys()) {
+      if (!scenesByGroup.has(groupId)) {
+        this.removeSceneSelectForGroup(groupId);
+      }
+    }
+    for (const [groupId, scenes] of scenesByGroup) {
+      this.rebuildSceneSelectForGroup(groupId, scenes);
     }
   }
 
@@ -253,6 +302,8 @@ class PhilipsHue {
     // removing entities with a single bridge is easy
     this.uc.clearConfiguredEntities();
     this.uc.clearAvailableEntities();
+    this.sceneOptionToId.clear();
+    this.sceneIdToOption.clear();
   }
 
   // terri: check if you can simplify since
@@ -265,6 +316,8 @@ class PhilipsHue {
         features: event.data.features
       });
       this.addAvailableLight(light);
+    } else if (event.type === "scene-added") {
+      this.rebuildSceneSelectForGroup(event.data.groupId);
     }
     this.updateEntityIndexes();
   }
@@ -424,6 +477,236 @@ class PhilipsHue {
     }
   }
 
+  private getSceneSelectEntityId(groupId: string): string {
+    return `${SCENE_SELECT_PREFIX}${groupId}`;
+  }
+
+  private groupIdFromSelectEntityId(entityId: string): string | undefined {
+    if (!entityId.startsWith(SCENE_SELECT_PREFIX)) {
+      return undefined;
+    }
+    return entityId.slice(SCENE_SELECT_PREFIX.length);
+  }
+
+  /**
+   * Rebuild (create or update) the scene Select entity for the given group.
+   *
+   * If `scenes` is omitted, queries the config for scenes belonging to `groupId`. Removes
+   * the Select if the group ends up with zero scenes — a Select with only the placeholder
+   * option carries no information and would clutter the entity list.
+   */
+  private rebuildSceneSelectForGroup(groupId: string, scenes?: (SceneConfig & { id: string })[]) {
+    const groupScenes = scenes ?? this.config.getScenes().filter((s) => s.groupId === groupId);
+    if (groupScenes.length === 0) {
+      this.removeSceneSelectForGroup(groupId);
+      return;
+    }
+
+    const { optionToId, idToOption } = buildSceneOptionsForGroup(groupScenes);
+    this.sceneOptionToId.set(groupId, optionToId);
+    // Refresh the reverse-direction map: drop stale entries for this group, then re-add.
+    for (const [sceneId, mapping] of this.sceneIdToOption) {
+      if (mapping.groupId === groupId) {
+        this.sceneIdToOption.delete(sceneId);
+      }
+    }
+    for (const [sceneId, option] of idToOption) {
+      this.sceneIdToOption.set(sceneId, { groupId, option });
+    }
+
+    const currentOption = this.deriveCurrentOptionForGroup(groupId) ?? SCENE_NONE_OPTION;
+    const options = this.computeOptionsForGroup(groupId, currentOption !== SCENE_NONE_OPTION);
+
+    const groupName = groupScenes[0].groupName;
+    const entityId = this.getSceneSelectEntityId(groupId);
+    const name = groupName ? `${groupName} scenes` : "Hue scenes";
+    const available = this.uc.getAvailableEntities();
+
+    if (available.contains(entityId)) {
+      const configured = this.uc.getConfiguredEntities();
+      const updates: Record<string, string | string[] | SelectStates> = {
+        [SelectAttributes.Options]: options,
+        [SelectAttributes.CurrentOption]: currentOption
+      };
+      configured.updateEntityAttributes(entityId, updates);
+      available.updateEntityAttributes(entityId, updates);
+    } else {
+      const select = new Select(entityId, name, {
+        description: groupName ? `Hue scenes in ${groupName}` : "Hue scenes",
+        area: groupName,
+        attributes: {
+          [SelectAttributes.State]: SelectStates.On,
+          [SelectAttributes.Options]: options,
+          [SelectAttributes.CurrentOption]: currentOption
+        }
+      });
+      select.setCmdHandler(this.onSceneSelectCommand.bind(this));
+      available.addAvailableEntity(select);
+    }
+  }
+
+  /**
+   * Build the options array for a group's Select, inserting the `—` placeholder only when no
+   * scene is currently active. The placeholder represents the current state when it's shown,
+   * so it disappears from the dropdown the moment any scene becomes active.
+   */
+  private computeOptionsForGroup(groupId: string, sceneActive: boolean): string[] {
+    const optionToId = this.sceneOptionToId.get(groupId);
+    const sceneOptions = optionToId ? [...optionToId.keys()] : [];
+    return sceneActive ? sceneOptions : [SCENE_NONE_OPTION, ...sceneOptions];
+  }
+
+  private removeSceneSelectForGroup(groupId: string) {
+    this.sceneOptionToId.delete(groupId);
+    for (const [sceneId, mapping] of this.sceneIdToOption) {
+      if (mapping.groupId === groupId) {
+        this.sceneIdToOption.delete(sceneId);
+      }
+    }
+    const entityId = this.getSceneSelectEntityId(groupId);
+    this.uc.getConfiguredEntities().removeEntity(entityId);
+    this.uc.getAvailableEntities().removeEntity(entityId);
+  }
+
+  /**
+   * Find the option string that should currently be shown for a group's Select.
+   *
+   * Returns the active scene's option label if one is set on the group's existing Select,
+   * mapped through the (possibly just-rebuilt) options. Returns undefined if there's no
+   * Select yet for this group (caller decides what to seed).
+   */
+  private deriveCurrentOptionForGroup(groupId: string): string | undefined {
+    const entityId = this.getSceneSelectEntityId(groupId);
+    const existing = this.uc.getAvailableEntities().getEntity(entityId);
+    if (!existing) {
+      return undefined;
+    }
+    const prevOption = (existing.attributes?.[SelectAttributes.CurrentOption] as string | undefined) ?? undefined;
+    if (!prevOption || prevOption === SCENE_NONE_OPTION) {
+      return SCENE_NONE_OPTION;
+    }
+    // If the previously-active scene still exists in this group, remap its label (it may
+    // have been renamed). Otherwise, fall back to the placeholder.
+    const optionToId = this.sceneOptionToId.get(groupId);
+    const sceneId = optionToId?.get(prevOption);
+    if (sceneId) {
+      const mapping = this.sceneIdToOption.get(sceneId);
+      return mapping?.option ?? SCENE_NONE_OPTION;
+    }
+    return SCENE_NONE_OPTION;
+  }
+
+  /**
+   * Set the Select's state for a group, given either the scene id whose activation we just
+   * observed or undefined to revert to "no scene active".
+   *
+   * Broadcasts both `current_option` and `options` in the same entity_change so the Remote
+   * sees a consistent snapshot: when a scene is active, the placeholder is absent from
+   * `options`; when no scene is active, the placeholder is present and is the current option.
+   */
+  private setSelectCurrentOption(groupId: string, sceneId: string | undefined) {
+    const entityId = this.getSceneSelectEntityId(groupId);
+    if (!this.uc.getAvailableEntities().contains(entityId)) {
+      return;
+    }
+    const option = sceneId ? (this.sceneIdToOption.get(sceneId)?.option ?? SCENE_NONE_OPTION) : SCENE_NONE_OPTION;
+    const sceneActive = option !== SCENE_NONE_OPTION;
+    const updates = {
+      [SelectAttributes.CurrentOption]: option,
+      [SelectAttributes.Options]: this.computeOptionsForGroup(groupId, sceneActive)
+    };
+    this.uc.getConfiguredEntities().updateEntityAttributes(entityId, updates);
+    this.uc.getAvailableEntities().updateEntityAttributes(entityId, updates);
+  }
+
+  private async onSceneSelectCommand(
+    entity: Entity,
+    command: string,
+    params?: { [key: string]: string | number | boolean }
+  ): Promise<StatusCodes> {
+    const groupId = this.groupIdFromSelectEntityId(entity.id);
+    if (!groupId) {
+      log.error("onSceneSelectCommand: entity id %s is not a scene Select", entity.id);
+      return StatusCodes.BadRequest;
+    }
+    const optionToId = this.sceneOptionToId.get(groupId);
+    if (!optionToId) {
+      log.warn("onSceneSelectCommand: no options registered for group %s", groupId);
+      return StatusCodes.BadRequest;
+    }
+
+    let targetOption: string | undefined;
+    switch (command) {
+      case SelectCommands.SelectOption:
+        targetOption = typeof params?.option === "string" ? params.option : undefined;
+        break;
+      case SelectCommands.SelectFirst:
+      case SelectCommands.SelectLast:
+      case SelectCommands.SelectNext:
+      case SelectCommands.SelectPrevious: {
+        // Navigation uses whatever options the Remote currently sees — the entity's live
+        // `options` attribute, not a freshly-built list. With the dynamic placeholder, the
+        // visible options vary based on whether a scene is active.
+        const currentEntity = this.uc.getAvailableEntities().getEntity(entity.id);
+        const options = (currentEntity?.attributes?.[SelectAttributes.Options] as string[] | undefined) ?? [];
+        if (options.length <= 1) {
+          // Empty, or only the `—` placeholder — nothing to navigate.
+          return StatusCodes.Ok;
+        }
+        const currentOption =
+          (currentEntity?.attributes?.[SelectAttributes.CurrentOption] as string | undefined) ?? SCENE_NONE_OPTION;
+        const currentIdx = Math.max(0, options.indexOf(currentOption));
+        const cycle = params?.cycle !== false;
+        let nextIdx: number;
+        if (command === SelectCommands.SelectFirst) {
+          nextIdx = 0;
+        } else if (command === SelectCommands.SelectLast) {
+          nextIdx = options.length - 1;
+        } else if (command === SelectCommands.SelectNext) {
+          nextIdx = currentIdx + 1 >= options.length ? (cycle ? 0 : currentIdx) : currentIdx + 1;
+        } else {
+          nextIdx = currentIdx - 1 < 0 ? (cycle ? options.length - 1 : currentIdx) : currentIdx - 1;
+        }
+        targetOption = options[nextIdx];
+        break;
+      }
+      default:
+        log.error("onSceneSelectCommand: unsupported command: %s", command);
+        return StatusCodes.BadRequest;
+    }
+
+    if (targetOption === undefined) {
+      log.warn("onSceneSelectCommand: missing `option` parameter for select_option");
+      return StatusCodes.BadRequest;
+    }
+
+    if (targetOption === SCENE_NONE_OPTION) {
+      // Selecting the placeholder is a no-op — the Hue API has no "deactivate scene" verb.
+      // The Select stays where it is (the bridge will resolve current_option via SSE if anything
+      // actually changed).
+      return StatusCodes.Ok;
+    }
+
+    const sceneId = optionToId.get(targetOption);
+    if (!sceneId) {
+      log.warn("onSceneSelectCommand: option %s not recognized for group %s", targetOption, groupId);
+      return StatusCodes.BadRequest;
+    }
+
+    // Optimistic UI: paint the new option immediately so the remote doesn't sit in a "pending"
+    // state while the bridge processes. Recall is fire-and-forget; SSE will reaffirm on success
+    // and we revert on failure. The bridge's PUT /scene response can take >1.5s; awaiting it
+    // would block this handler (and the remote's UI) for the full RTT plus any retries.
+    this.setSelectCurrentOption(groupId, sceneId);
+    this.hueApi.sceneResource.recall(sceneId).catch((error) => {
+      log.error("Scene recall failed for %s, reverting Select to placeholder:", sceneId, error);
+      // We don't actually know which scene (if any) the bridge is currently in; safest is to
+      // revert to the placeholder. SSE will correct if some other scene was already active.
+      this.setSelectCurrentOption(groupId, undefined);
+    });
+    return StatusCodes.Ok;
+  }
+
   private getMirek(entityId: string, config?: LightOrGroupConfig) {
     const minMirek = config?.mirek_schema?.mirek_minimum;
     const maxMirek = config?.mirek_schema?.mirek_maximum;
@@ -514,9 +797,71 @@ class PhilipsHue {
           this.syncGroupState(data.id, updateGroupData).catch((error) =>
             log.error("Syncing group state failed for event stream update:", error)
           );
+          // a group rename cascades to the displayed names of any scenes pointing at it
+          this.propagateGroupRenameToScenes(data.id, updateGroupData.metadata.name);
+        }
+      } else if (data.type === "scene") {
+        log.debug("event stream scene update: %s", JSON.stringify(data));
+        const sceneCfg = this.config.getScene(data.id);
+        if (!sceneCfg) {
+          log.debug("No config for scene %s, skipping update", data.id);
+          continue;
+        }
+        let labelsChanged = false;
+        if (data.metadata && typeof data.metadata === "object" && "name" in data.metadata) {
+          const newName = data.metadata.name as string;
+          if (newName !== sceneCfg.name) {
+            this.config.updateScene(data.id, { ...sceneCfg, name: newName });
+            labelsChanged = true;
+          }
+        }
+        // Whichever scene the bridge reports as active is reflected in its group's Select.
+        // The bridge uses several active-state strings ("static", "dynamic_palette", …) for
+        // "scene is playing"; we only care about the binary "playing vs not".
+        if (data.status && typeof data.status === "object" && "active" in data.status) {
+          if (data.status.active !== "inactive") {
+            this.setSelectCurrentOption(sceneCfg.groupId, data.id);
+          } else {
+            // Only clear if this scene is the one currently shown — another scene becoming
+            // active will already have moved the Select away from this one.
+            const mapping = this.sceneIdToOption.get(data.id);
+            if (mapping) {
+              const entityId = this.getSceneSelectEntityId(mapping.groupId);
+              const existing = this.uc.getAvailableEntities().getEntity(entityId);
+              const currentOption = existing?.attributes?.[SelectAttributes.CurrentOption] as string | undefined;
+              if (currentOption === mapping.option) {
+                this.setSelectCurrentOption(mapping.groupId, undefined);
+              }
+            }
+          }
+        }
+        if (labelsChanged) {
+          // Option label for this scene changed — rebuild the group's Select so options
+          // (and the maps) stay in lockstep with the scene name shown to the user.
+          this.rebuildSceneSelectForGroup(sceneCfg.groupId);
         }
       }
     }
+  }
+
+  private propagateGroupRenameToScenes(groupId: string, newGroupName: string) {
+    let renamed = false;
+    for (const scene of this.config.getScenes()) {
+      if (scene.groupId === groupId && scene.groupName !== newGroupName) {
+        const { id, ...rest } = scene;
+        this.config.updateScene(id, { ...rest, groupName: newGroupName });
+        renamed = true;
+      }
+    }
+    if (!renamed) {
+      return;
+    }
+    // The Select entity name embeds the group name ("<Group> scenes") and uses it as the area;
+    // both need to be updated. The integration-api entity-list API doesn't support a name edit,
+    // so we drop and re-add the entity instead. Any subscribers see one entity-removed +
+    // entity-added pair, which is acceptable for the rare group-rename case.
+    this.removeSceneSelectForGroup(groupId);
+    this.rebuildSceneSelectForGroup(groupId);
   }
 
   private async handleEventStreamAdd(event: HueEvent) {
@@ -534,6 +879,14 @@ class PhilipsHue {
             addAvailableGroups([group], data.type, this.config);
           }
           break;
+        case "scene": {
+          const scene = await this.hueApi.sceneResource.getScene(data.id);
+          addAvailableScenes([scene], this.config);
+          this.rebuildSceneSelectForGroup(scene.group.rid);
+          // If the scene is recalled right after creation, the bridge will emit a separate
+          // status.active update — handled in handleEventStreamUpdate. Nothing to seed here.
+          break;
+        }
       }
     }
   }
@@ -541,6 +894,14 @@ class PhilipsHue {
   private handleEventStreamDelete(event: HueEvent) {
     const configured = this.uc.getConfiguredEntities();
     for (const data of event.data) {
+      if (data.type === "scene") {
+        const sceneCfg = this.config.getScene(data.id);
+        this.config.removeScene(data.id);
+        if (sceneCfg) {
+          this.rebuildSceneSelectForGroup(sceneCfg.groupId);
+        }
+        continue;
+      }
       const publicIds = this.getPublicEntityIds(data.id);
       for (const publicEntityId of publicIds) {
         configured.updateEntityAttributes(publicEntityId, {
@@ -577,6 +938,21 @@ class PhilipsHue {
     if (hubConfig && hubConfig.ip) {
       // manually fetch the current light states and send entity updates
       for (const id of ids) {
+        if (id.startsWith(SCENE_SELECT_PREFIX)) {
+          // Scene Select entities are not lights/groups, so no per-entity bridge fetch is
+          // needed. But: any attribute mutations that happened on availableEntities before
+          // this subscribe (e.g. during setup, when scenes were added one at a time and the
+          // Select's `options` list grew) were never broadcast — `updateEntityAttributes`
+          // only broadcasts when the entity is already in configuredEntities. The framework
+          // adds the entity to configured BEFORE emitting SubscribeEntities, so re-sending
+          // the current attributes here lets the Remote learn the full options array,
+          // current_option, and state in one entity_change event.
+          const entity = this.uc.getAvailableEntities().getEntity(id);
+          if (entity?.attributes) {
+            this.uc.getConfiguredEntities().updateEntityAttributes(id, { ...entity.attributes });
+          }
+          continue;
+        }
         await this.updateLight(id);
       }
       this.updateEntityIndexes();
@@ -628,10 +1004,39 @@ class PhilipsHue {
     // TODO get all lights at once instead of one call per light? Probably have to split by group type
     for (const entity of this.uc.getConfiguredEntities().getEntities()) {
       const entityId = entity.entity_id as string;
+      // Scene Select entities don't have a light/group config; their state is refreshed by
+      // refreshSceneSelectStates() below from the scene resource itself.
+      if (entityId.startsWith(SCENE_SELECT_PREFIX)) {
+        continue;
+      }
       await this.updateLight(entityId);
     }
     this.updateEntityIndexes();
+    await this.refreshSceneSelectStates();
     // TODO if an error occurred while updating lights: perform a manual connectivity test and set entity states
+  }
+
+  /**
+   * Apply the bridge's current per-group active scene to each Select's `current_option`.
+   * Called on event-stream connect so the UI is correct without waiting for the next SSE
+   * transition.
+   */
+  private async refreshSceneSelectStates() {
+    if (this.sceneOptionToId.size === 0) {
+      return;
+    }
+    try {
+      const activeScenes = await this.hueApi.sceneResource.getActiveScenes();
+      const activeByGroup = new Map<string, string>();
+      for (const scene of activeScenes) {
+        activeByGroup.set(scene.groupId, scene.id);
+      }
+      for (const groupId of this.sceneOptionToId.keys()) {
+        this.setSelectCurrentOption(groupId, activeByGroup.get(groupId));
+      }
+    } catch (error) {
+      log.error("Refreshing scene Select states failed:", error);
+    }
   }
 
   /**
