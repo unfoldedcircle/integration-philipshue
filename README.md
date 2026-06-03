@@ -36,7 +36,7 @@ Requirements:
 
 - Remote Two/3 firmware v1.9.3 or newer (with custom integration support)
 - [nvm](https://github.com/nvm-sh/nvm) for managing Node.js versions (recommended)
-- Node.js v22.13 or newer (older versions are untested)
+- Node.js v22.22 or newer (older versions are untested)
 
 Install dependencies:
 
