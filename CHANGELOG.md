@@ -7,15 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+_Changes in the next release_
+
+---
+
+## v0.4.0 - 2026-06-04
+
 ### Added
 
-- Each Hue room/zone with scenes is exposed as a `Select` entity; `current_option` tracks the active scene via SSE ([#134](https://github.com/unfoldedcircle/integration-philipshue/pull/134)).
+- Each Hue room/zone with scenes is exposed as a `Select` entity; `current_option` tracks the active scene via SSE by @stakats ([#134](https://github.com/unfoldedcircle/integration-philipshue/pull/134)).
 
 ### Changed
 
 - Configuration version bumped from 3 to 4; the migration now also fetches scenes ([#134](https://github.com/unfoldedcircle/integration-philipshue/pull/134)).
-
----
+- Update Node.js to 22.22
+- Dependency updates.
 
 ## v0.3.3 - 2026-04-27
 
