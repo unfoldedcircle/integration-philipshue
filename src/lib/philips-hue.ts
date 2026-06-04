@@ -40,7 +40,8 @@ import {
   getMostCommonGamut,
   mirekToColorTemp,
   percentToBrightness,
-  SCENE_NONE_OPTION
+  SCENE_NONE_OPTION,
+  SCENE_OFF_OPTION
 } from "../util.js";
 import HueApi, { HueError } from "./hue-api/api.js";
 import HueEventStream from "./hue-api/event-stream.js";
@@ -74,6 +75,11 @@ class PhilipsHue {
   // so SSE handlers (status.active transitions) can find the option in O(1).
   private sceneOptionToId: Map<string, Map<string, string>> = new Map();
   private sceneIdToOption: Map<string, { groupId: string; option: string }> = new Map();
+  // Tracks the last-known on/off state of each group that has a scene Select, keyed by
+  // groupId. Drives the `Off` current_option / placeholder distinction without depending on
+  // whether the group's Light entity is configured. Populated from grouped_light SSE events
+  // and syncGroupState; absent entry => assume on (show the `—` placeholder).
+  private groupPowerOn: Map<string, boolean> = new Map();
 
   constructor() {
     this.uc = new IntegrationAPI();
@@ -515,7 +521,7 @@ class PhilipsHue {
     }
 
     const currentOption = this.deriveCurrentOptionForGroup(groupId) ?? SCENE_NONE_OPTION;
-    const options = this.computeOptionsForGroup(groupId, currentOption !== SCENE_NONE_OPTION);
+    const options = this.computeOptionsForGroup(groupId, currentOption);
 
     const groupName = groupScenes[0].groupName;
     const entityId = this.getSceneSelectEntityId(groupId);
@@ -546,14 +552,17 @@ class PhilipsHue {
   }
 
   /**
-   * Build the options array for a group's Select, inserting the `—` placeholder only when no
-   * scene is currently active. The placeholder represents the current state when it's shown,
-   * so it disappears from the dropdown the moment any scene becomes active.
+   * Build the options array for a group's Select given its resolved `current_option`.
+   *
+   * `Off` is always present and selectable (turning it on turns the whole group off). The `—`
+   * placeholder is included only when it is the current option (group on, no scene active), so
+   * it disappears from the dropdown the moment a scene becomes active or the group turns off.
    */
-  private computeOptionsForGroup(groupId: string, sceneActive: boolean): string[] {
+  private computeOptionsForGroup(groupId: string, currentOption: string): string[] {
     const optionToId = this.sceneOptionToId.get(groupId);
     const sceneOptions = optionToId ? [...optionToId.keys()] : [];
-    return sceneActive ? sceneOptions : [SCENE_NONE_OPTION, ...sceneOptions];
+    const placeholder = currentOption === SCENE_NONE_OPTION ? [SCENE_NONE_OPTION] : [];
+    return [...placeholder, SCENE_OFF_OPTION, ...sceneOptions];
   }
 
   private removeSceneSelectForGroup(groupId: string) {
@@ -581,19 +590,21 @@ class PhilipsHue {
     if (!existing) {
       return undefined;
     }
+    // The non-scene sentinel reflects current group power: `Off` when off, `—` when on.
+    const noScene = this.groupPowerOn.get(groupId) === false ? SCENE_OFF_OPTION : SCENE_NONE_OPTION;
     const prevOption = (existing.attributes?.[SelectAttributes.CurrentOption] as string | undefined) ?? undefined;
-    if (!prevOption || prevOption === SCENE_NONE_OPTION) {
-      return SCENE_NONE_OPTION;
+    if (!prevOption || prevOption === SCENE_NONE_OPTION || prevOption === SCENE_OFF_OPTION) {
+      return noScene;
     }
     // If the previously-active scene still exists in this group, remap its label (it may
-    // have been renamed). Otherwise, fall back to the placeholder.
+    // have been renamed). Otherwise, fall back to the power-based sentinel.
     const optionToId = this.sceneOptionToId.get(groupId);
     const sceneId = optionToId?.get(prevOption);
     if (sceneId) {
       const mapping = this.sceneIdToOption.get(sceneId);
-      return mapping?.option ?? SCENE_NONE_OPTION;
+      return mapping?.option ?? noScene;
     }
-    return SCENE_NONE_OPTION;
+    return noScene;
   }
 
   /**
@@ -601,22 +612,58 @@ class PhilipsHue {
    * observed or undefined to revert to "no scene active".
    *
    * Broadcasts both `current_option` and `options` in the same entity_change so the Remote
-   * sees a consistent snapshot: when a scene is active, the placeholder is absent from
-   * `options`; when no scene is active, the placeholder is present and is the current option.
+   * sees a consistent snapshot. With no active scene, the current option reflects the group's
+   * power: `Off` when off, the `—` placeholder when on (the placeholder then appears in
+   * `options`; `Off` is always present and selectable).
    */
   private setSelectCurrentOption(groupId: string, sceneId: string | undefined) {
     const entityId = this.getSceneSelectEntityId(groupId);
     if (!this.uc.getAvailableEntities().contains(entityId)) {
       return;
     }
-    const option = sceneId ? (this.sceneIdToOption.get(sceneId)?.option ?? SCENE_NONE_OPTION) : SCENE_NONE_OPTION;
-    const sceneActive = option !== SCENE_NONE_OPTION;
+    let option: string;
+    if (sceneId) {
+      // An active scene implies the group is on; show the scene regardless of power state.
+      option = this.sceneIdToOption.get(sceneId)?.option ?? SCENE_NONE_OPTION;
+    } else {
+      // No active scene: reflect the group's power — `Off` when off, `—` placeholder when on.
+      option = this.groupPowerOn.get(groupId) === false ? SCENE_OFF_OPTION : SCENE_NONE_OPTION;
+    }
     const updates = {
       [SelectAttributes.CurrentOption]: option,
-      [SelectAttributes.Options]: this.computeOptionsForGroup(groupId, sceneActive)
+      [SelectAttributes.Options]: this.computeOptionsForGroup(groupId, option)
     };
     this.uc.getConfiguredEntities().updateEntityAttributes(entityId, updates);
     this.uc.getAvailableEntities().updateEntityAttributes(entityId, updates);
+  }
+
+  /**
+   * Record a group's on/off state and reconcile its scene Select's `Off`/`—` sentinel.
+   *
+   * Fed from grouped_light SSE events and {@link syncGroupState}. Only groups that have a
+   * scene Select are reconciled. On a power change we move the sentinel — but when the group
+   * turns on we only act if the Select currently shows `Off`, so a concurrently-activated
+   * scene (whose SSE event may arrive before or after the power event) is never clobbered.
+   */
+  private recordGroupPowerForScenes(groupId: string, on: boolean) {
+    const prev = this.groupPowerOn.get(groupId);
+    this.groupPowerOn.set(groupId, on);
+    if (prev === on || !this.sceneOptionToId.has(groupId)) {
+      return;
+    }
+    const entityId = this.getSceneSelectEntityId(groupId);
+    const current = this.uc.getAvailableEntities().getEntity(entityId)?.attributes?.[SelectAttributes.CurrentOption] as
+      | string
+      | undefined;
+    if (!on) {
+      // Group turned off: show `Off`, clearing any active scene or placeholder.
+      if (current !== SCENE_OFF_OPTION) {
+        this.setSelectCurrentOption(groupId, undefined);
+      }
+    } else if (current === SCENE_OFF_OPTION) {
+      // Group turned on with no scene yet: move `Off` back to the `—` placeholder.
+      this.setSelectCurrentOption(groupId, undefined);
+    }
   }
 
   private async onSceneSelectCommand(
@@ -678,6 +725,29 @@ class PhilipsHue {
     if (targetOption === undefined) {
       log.warn("onSceneSelectCommand: missing `option` parameter for select_option");
       return StatusCodes.BadRequest;
+    }
+
+    if (targetOption === SCENE_OFF_OPTION) {
+      const groupConfig = this.config.getLight(groupId);
+      if (!groupConfig || !this.isGroupConfig(groupConfig)) {
+        log.warn("onSceneSelectCommand: no group config for %s; cannot turn off", groupId);
+        return StatusCodes.BadRequest;
+      }
+      // Optimistic UI: paint `Off` immediately, then turn the whole group off. Same call the
+      // group's Light entity makes (PUT /grouped_light/<id> {on:{on:false}}), fanned out over
+      // the group's grouped_light ids. SSE reaffirms on success; we revert on failure.
+      this.groupPowerOn.set(groupId, false);
+      this.setSelectCurrentOption(groupId, undefined); // resolves to `Off`
+      Promise.all(
+        groupConfig.groupedLightIds.map((groupedLightId) =>
+          this.hueApi.lightResource.setOn(groupedLightId, false, false)
+        )
+      ).catch((error) => {
+        log.error("Turning group %s off from scene Select failed, reverting:", groupId, error);
+        this.groupPowerOn.set(groupId, true);
+        this.setSelectCurrentOption(groupId, undefined);
+      });
+      return StatusCodes.Ok;
     }
 
     if (targetOption === SCENE_NONE_OPTION) {
@@ -750,6 +820,13 @@ class PhilipsHue {
         this.syncLightState(entityId, data).catch((error) =>
           log.error("Syncing lights failed for event stream update:", error)
         );
+
+        // Track group power for the scene Select's `Off`/`—` sentinel. Done here (not inside
+        // syncLightState, which bails when the group's Light entity isn't configured) so the
+        // Select stays correct even if only the scene Select is configured.
+        if (data.type === "grouped_light" && data.on && typeof data.on === "object" && "on" in data.on) {
+          this.recordGroupPowerForScenes(entityId, !!data.on.on);
+        }
 
         // grouped_light can't be updated, they are a compound of multiple devices and belong to a room/zone
         if (data.type === "light") {
@@ -1189,6 +1266,11 @@ class PhilipsHue {
       groupState[LightAttributes.State] = LightStates.On;
     } else if (anyOff) {
       groupState[LightAttributes.State] = LightStates.Off;
+    }
+    // Keep the group's scene Select `Off`/`—` sentinel in sync (covers initial load and
+    // room/zone events). Only when the grouped lights actually reported a power state.
+    if (anyOn || anyOff) {
+      this.recordGroupPowerForScenes(entityId, anyOn);
     }
 
     const dimming = groupedLights?.find((groupLight) => groupLight.dimming);

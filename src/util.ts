@@ -29,6 +29,16 @@ import Config, { GroupConfig, LightConfig, SceneConfig } from "./config.js";
  */
 export const SCENE_NONE_OPTION = "—";
 
+/**
+ * Option shown for turning a group off / reflecting that it is off.
+ *
+ * Unlike {@link SCENE_NONE_OPTION}, this option is always present in a group's scene
+ * Select. It is the `current_option` whenever the group is off, and selecting it while the
+ * group is on turns the entire group off. Like the placeholder, the caller (not
+ * {@link buildSceneOptionsForGroup}) inserts it into the options list.
+ */
+export const SCENE_OFF_OPTION = "Off";
+
 export function convertImageToBase64(file: string) {
   let data;
 
