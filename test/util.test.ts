@@ -1,7 +1,7 @@
 import test from "ava";
 import {
   brightnessToPercent,
-  buildSceneOptionsForGroup,
+  buildSceneSelectOptions,
   colorTempToMirek,
   convertHSVtoXY,
   convertXYtoHSV,
@@ -19,8 +19,6 @@ import {
   convertImageToBase64,
   i18all,
   isDeepEqual,
-  isOffOption,
-  OFF_LABEL_KEY,
   SCENE_NONE_OPTION
 } from "../src/util.js";
 import { SceneConfig } from "../src/config.js";
@@ -508,22 +506,6 @@ test("locale files define scenes.off for each supported language", (t) => {
   }
 });
 
-test("isOffOption matches the Off label in any supported language", (t) => {
-  const originalH = i18n.__h;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  i18n.__h = (key: string): any => (key === OFF_LABEL_KEY ? [{ en: "Off" }, { de: "Aus" }, { fr: "Éteint" }] : []);
-
-  try {
-    t.true(isOffOption("Off"));
-    t.true(isOffOption("Aus"));
-    t.true(isOffOption("Éteint"));
-    t.false(isOffOption("Relax"));
-    t.false(isOffOption(SCENE_NONE_OPTION));
-  } finally {
-    i18n.__h = originalH;
-  }
-});
-
 // --- isDeepEqual ---
 
 test("isDeepEqual compares primitives", (t) => {
@@ -587,42 +569,59 @@ function makeScene(id: string, name: string, groupId = "g1"): SceneConfig & { id
   return { id, name, groupId, groupRtype: "room", groupName: "Living Room" };
 }
 
-test("buildSceneOptionsForGroup returns an empty options array for an empty group", (t) => {
-  const result = buildSceneOptionsForGroup([]);
-  t.deepEqual(result.options, []);
-  t.is(result.optionToId.size, 0);
-  t.is(result.idToOption.size, 0);
+// Helper: scene labels (kind === "scene") in catalog order.
+function sceneLabels(options: ReturnType<typeof buildSceneSelectOptions>): string[] {
+  return options.filter((o) => o.kind === "scene").map((o) => o.label);
+}
+
+test("buildSceneSelectOptions always leads with the off and none sentinels", (t) => {
+  const result = buildSceneSelectOptions([], "Off");
+  t.deepEqual(
+    result.map((o) => o.kind),
+    ["off", "none"]
+  );
+  t.is(result[0].label, "Off");
+  t.is(result[1].label, SCENE_NONE_OPTION);
 });
 
-test("buildSceneOptionsForGroup sorts scenes alphabetically without prepending a placeholder", (t) => {
-  const scenes = [makeScene("s1", "Bright"), makeScene("s2", "Cozy"), makeScene("s3", "Ambient")];
-  const result = buildSceneOptionsForGroup(scenes);
-  t.deepEqual(result.options, ["Ambient", "Bright", "Cozy"]);
-  t.false(result.options.includes(SCENE_NONE_OPTION), "placeholder is not embedded in helper output");
-  t.is(result.optionToId.get("Ambient"), "s3");
-  t.is(result.optionToId.get("Bright"), "s1");
-  t.is(result.optionToId.get("Cozy"), "s2");
-});
-
-test("buildSceneOptionsForGroup sorts case-insensitively", (t) => {
+test("buildSceneSelectOptions sorts scenes alphabetically (case-insensitive) after the sentinels", (t) => {
   const scenes = [makeScene("s1", "bright"), makeScene("s2", "Ambient"), makeScene("s3", "Cozy")];
-  const result = buildSceneOptionsForGroup(scenes);
-  t.deepEqual(result.options, ["Ambient", "bright", "Cozy"]);
+  const result = buildSceneSelectOptions(scenes, "Off");
+  t.deepEqual(sceneLabels(result), ["Ambient", "bright", "Cozy"]);
+  const ambient = result.find((o) => o.kind === "scene" && o.label === "Ambient");
+  t.is(ambient?.kind === "scene" ? ambient.sceneId : undefined, "s2");
 });
 
-test("buildSceneOptionsForGroup suffixes duplicate scene names with (2), (3)", (t) => {
+test("buildSceneSelectOptions suffixes duplicate scene names with (2), (3)", (t) => {
   const scenes = [makeScene("s1", "Movie Night"), makeScene("s2", "Movie Night"), makeScene("s3", "Movie Night")];
-  const result = buildSceneOptionsForGroup(scenes);
-  t.deepEqual(result.options, ["Movie Night", "Movie Night (2)", "Movie Night (3)"]);
-  t.is(result.optionToId.get("Movie Night"), "s1");
-  t.is(result.optionToId.get("Movie Night (2)"), "s2");
-  t.is(result.optionToId.get("Movie Night (3)"), "s3");
+  const result = buildSceneSelectOptions(scenes, "Off");
+  t.deepEqual(sceneLabels(result), ["Movie Night", "Movie Night (2)", "Movie Night (3)"]);
 });
 
-test("buildSceneOptionsForGroup builds matching forward and reverse maps", (t) => {
-  const scenes = [makeScene("s1", "Bright"), makeScene("s2", "Bright")];
-  const result = buildSceneOptionsForGroup(scenes);
-  for (const [option, sceneId] of result.optionToId) {
-    t.is(result.idToOption.get(sceneId), option);
-  }
+test("buildSceneSelectOptions suffixes a scene that collides with the off label", (t) => {
+  const result = buildSceneSelectOptions([makeScene("s1", "Off")], "Off");
+  // The off sentinel keeps the bare "Off"; the scene named "Off" is suffixed and stays a scene.
+  t.is(result.find((o) => o.kind === "off")?.label, "Off");
+  const scene = result.find((o) => o.kind === "scene");
+  t.is(scene?.label, "Off (2)");
+  t.is(scene?.kind === "scene" ? scene.sceneId : undefined, "s1");
+});
+
+test("buildSceneSelectOptions suffixes a scene that collides with the localized off label", (t) => {
+  const result = buildSceneSelectOptions([makeScene("s1", "Aus")], "Aus");
+  t.is(result.find((o) => o.kind === "off")?.label, "Aus");
+  t.is(result.find((o) => o.kind === "scene")?.label, "Aus (2)");
+});
+
+test("buildSceneSelectOptions suffixes a scene that collides with the — placeholder", (t) => {
+  const result = buildSceneSelectOptions([makeScene("s1", SCENE_NONE_OPTION)], "Off");
+  t.is(result.find((o) => o.kind === "none")?.label, SCENE_NONE_OPTION);
+  t.is(result.find((o) => o.kind === "scene")?.label, `${SCENE_NONE_OPTION} (2)`);
+});
+
+test("buildSceneSelectOptions produces unique labels across all descriptors", (t) => {
+  const scenes = [makeScene("s1", "Off"), makeScene("s2", "Off"), makeScene("s3", SCENE_NONE_OPTION)];
+  const result = buildSceneSelectOptions(scenes, "Off");
+  const labels = result.map((o) => o.label);
+  t.is(new Set(labels).size, labels.length, "no duplicate labels");
 });

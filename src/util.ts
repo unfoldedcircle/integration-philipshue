@@ -20,12 +20,12 @@ import log from "./log.js";
 import Config, { GroupConfig, LightConfig, SceneConfig } from "./config.js";
 
 /**
- * Placeholder option shown when no scene is active in a group.
+ * Label of the "no scene active" placeholder option (a language-neutral em dash).
  *
  * The Select entity contract requires `current_option` to be one of the strings in
- * `options`, so we always include this marker at the top of every per-group scene
- * Select. Selecting it is a no-op (no bridge call) — it only ever appears as the
- * UI state when the bridge reports no scene active for the group.
+ * `options`. This marker is the `current_option` only while the group is on with no active
+ * scene; selecting it is a no-op. {@link buildSceneSelectOptions} reserves this label so a
+ * scene named "—" can't collide with it.
  */
 export const SCENE_NONE_OPTION = "—";
 
@@ -33,13 +33,22 @@ export const SCENE_NONE_OPTION = "—";
  * i18n key for the scene Select "Off" option.
  *
  * Unlike {@link SCENE_NONE_OPTION} (a language-neutral em dash), the "Off" option is
- * localized: it is always present in a group's scene Select, is the `current_option`
- * whenever the group is off, and turns the entire group off when selected while on. The
- * caller (not {@link buildSceneOptionsForGroup}) inserts the resolved label into the options
- * list — use {@link localize} to render it in the active language and {@link isOffOption} to
- * match an incoming/stored label against any supported language.
+ * localized via {@link localize}: it is always present in a group's scene Select, is the
+ * `current_option` whenever the group is off, and turns the entire group off when selected
+ * while on. {@link buildSceneSelectOptions} reserves the resolved label so a scene named like
+ * it can't collide.
  */
 export const OFF_LABEL_KEY = "scenes.off";
+
+/**
+ * One entry in a group's scene Select. The `kind` discriminates how a selected `label`
+ * dispatches; `label` is what the Remote displays and echoes back (the Select protocol has no
+ * separate id/value channel, so labels must be unique — see {@link buildSceneSelectOptions}).
+ */
+export type SceneSelectOption =
+  | { kind: "off"; label: string }
+  | { kind: "none"; label: string }
+  | { kind: "scene"; label: string; sceneId: string };
 
 export function convertImageToBase64(file: string) {
   let data;
@@ -112,41 +121,49 @@ export function addAvailableScenes(scenes: CombinedSceneResource[], config: Conf
 }
 
 /**
- * Build the option labels and lookup maps for a single group's scene Select entity.
+ * Build the ordered descriptor catalog for a single group's scene Select entity.
  *
- * The returned `options` array holds the group's scenes sorted alphabetically by name
- * (case-insensitive). Scenes with duplicate names get ` (2)`, ` (3)` suffixes — Hue allows
- * duplicate scene names within a group, but `current_option` is a string and must be unique
- * to disambiguate, so we deterministically suffix in iteration order.
+ * Returns `[off, none, ...scenes]` where scenes are sorted alphabetically by name
+ * (case-insensitive). Every descriptor's `label` is guaranteed unique: the two sentinel
+ * labels (`offLabel` and {@link SCENE_NONE_OPTION}) are reserved first, then scene names are
+ * assigned and any collision — a duplicate scene name, or a scene named like a sentinel — gets
+ * a ` (2)`, ` (3)`, … suffix. This is what lets a scene literally named "Off" or "—" stay
+ * selectable and recallable: it becomes "Off (2)" / "— (2)" and dispatches by its descriptor
+ * `kind`, not by string-matching a sentinel.
  *
- * This helper deliberately does **not** include {@link SCENE_NONE_OPTION}. The "no scene
- * active" placeholder is inserted by the caller only when it actually represents current
- * state — so it disappears from the dropdown whenever a real scene is active.
+ * The caller decides which descriptors appear in the emitted `options` array (the `none`
+ * placeholder only when it is the current option) and resolves an inbound option label back to
+ * its descriptor.
  *
- * Returns both directions of the option ↔ scene-id mapping so the SSE handlers (sceneId →
- * option) and the command handler (option → sceneId) can each do their lookup in O(1).
+ * @param scenes the group's scenes
+ * @param offLabel the localized "Off" label for the active language
  */
-export function buildSceneOptionsForGroup(scenes: (SceneConfig & { id: string })[]): {
-  options: string[];
-  optionToId: Map<string, string>;
-  idToOption: Map<string, string>;
-} {
-  const optionToId = new Map<string, string>();
-  const idToOption = new Map<string, string>();
-  const options: string[] = [];
+export function buildSceneSelectOptions(
+  scenes: (SceneConfig & { id: string })[],
+  offLabel: string
+): SceneSelectOption[] {
+  // Reserve the sentinel labels so a scene named like one gets suffixed instead of colliding.
+  const used = new Set<string>([offLabel, SCENE_NONE_OPTION]);
+  const uniqueLabel = (base: string): string => {
+    let label = base;
+    let n = 1;
+    while (used.has(label)) {
+      n += 1;
+      label = `${base} (${n})`;
+    }
+    used.add(label);
+    return label;
+  };
 
   const sorted = [...scenes].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
-  const seen = new Map<string, number>();
+  const options: SceneSelectOption[] = [
+    { kind: "off", label: offLabel },
+    { kind: "none", label: SCENE_NONE_OPTION }
+  ];
   for (const scene of sorted) {
-    const base = scene.name;
-    const count = (seen.get(base) ?? 0) + 1;
-    seen.set(base, count);
-    const label = count === 1 ? base : `${base} (${count})`;
-    options.push(label);
-    optionToId.set(label, scene.id);
-    idToOption.set(scene.id, label);
+    options.push({ kind: "scene", label: uniqueLabel(scene.name), sceneId: scene.id });
   }
-  return { options, optionToId, idToOption };
+  return options;
 }
 
 export function getLightFeatures(light: LightResource): LightFeatures[] {
@@ -762,19 +779,6 @@ export function i18all(key: string): Record<string, string> {
  */
 export function localize(key: string, language: string): string {
   return i18n.__({ phrase: key, locale: language });
-}
-
-/**
- * Whether an option label is the "Off" scene-Select option in ANY supported language.
- *
- * Inbound select commands and previously-rendered labels are matched against every localized
- * variant, so a language change between sending the options and receiving the command (or
- * across a reconnect) still resolves correctly.
- *
- * @param option the option label to test
- */
-export function isOffOption(option: string): boolean {
-  return Object.values(i18all(OFF_LABEL_KEY)).includes(option);
 }
 
 /**
