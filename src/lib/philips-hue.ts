@@ -38,10 +38,12 @@ import {
   getLightFeatures,
   getMinMaxMirek,
   getMostCommonGamut,
+  isOffOption,
+  localize,
   mirekToColorTemp,
+  OFF_LABEL_KEY,
   percentToBrightness,
-  SCENE_NONE_OPTION,
-  SCENE_OFF_OPTION
+  SCENE_NONE_OPTION
 } from "../util.js";
 import HueApi, { HueError } from "./hue-api/api.js";
 import HueEventStream from "./hue-api/event-stream.js";
@@ -80,6 +82,9 @@ class PhilipsHue {
   // whether the group's Light entity is configured. Populated from grouped_light SSE events
   // and syncGroupState; absent entry => assume on (show the `—` placeholder).
   private groupPowerOn: Map<string, boolean> = new Map();
+  // Active UI language for localizing runtime entity strings (currently the scene Select
+  // "Off" option). Resolved on connect via resolveLanguage(); defaults to English.
+  private language = "en";
 
   constructor() {
     this.uc = new IntegrationAPI();
@@ -228,6 +233,38 @@ class PhilipsHue {
     for (const [groupId, scenes] of scenesByGroup) {
       this.rebuildSceneSelectForGroup(groupId, scenes);
     }
+  }
+
+  /**
+   * Resolve the UI language used to localize runtime entity strings (the scene Select "Off"
+   * option). Returns English for now.
+   *
+   * **Single swap point** for the localization source. The `@unfoldedcircle/integration-api`
+   * Node SDK (v0.5.0) exposes no way to query the remote's active language — only the Python
+   * `ucapi` lib has `get_localization_cfg`. Once that lands in the Node SDK, replace this body
+   * with a poll of the remote's language on connect (validated against the locale set in
+   * driver.ts), mirroring kennymc-c's pattern. Everything downstream (offLabel/isOffOption,
+   * applyLanguage's rebuild) already handles a non-English result.
+   */
+  private resolveLanguage(): string {
+    return "en";
+  }
+
+  /**
+   * Apply a UI language. If it changed, rebuild every group's scene Select so the localized
+   * "Off" option (label and, when current, `current_option`) is re-emitted.
+   */
+  private applyLanguage(language: string) {
+    if (language === this.language) {
+      return;
+    }
+    this.language = language;
+    this.rebuildAllSceneSelects();
+  }
+
+  /** The scene Select "Off" option label in the active language. */
+  private offLabel(): string {
+    return localize(OFF_LABEL_KEY, this.language);
   }
 
   private updateEntityIndexes() {
@@ -562,7 +599,7 @@ class PhilipsHue {
     const optionToId = this.sceneOptionToId.get(groupId);
     const sceneOptions = optionToId ? [...optionToId.keys()] : [];
     const placeholder = currentOption === SCENE_NONE_OPTION ? [SCENE_NONE_OPTION] : [];
-    return [...placeholder, SCENE_OFF_OPTION, ...sceneOptions];
+    return [...placeholder, this.offLabel(), ...sceneOptions];
   }
 
   private removeSceneSelectForGroup(groupId: string) {
@@ -591,9 +628,9 @@ class PhilipsHue {
       return undefined;
     }
     // The non-scene sentinel reflects current group power: `Off` when off, `—` when on.
-    const noScene = this.groupPowerOn.get(groupId) === false ? SCENE_OFF_OPTION : SCENE_NONE_OPTION;
+    const noScene = this.groupPowerOn.get(groupId) === false ? this.offLabel() : SCENE_NONE_OPTION;
     const prevOption = (existing.attributes?.[SelectAttributes.CurrentOption] as string | undefined) ?? undefined;
-    if (!prevOption || prevOption === SCENE_NONE_OPTION || prevOption === SCENE_OFF_OPTION) {
+    if (!prevOption || prevOption === SCENE_NONE_OPTION || isOffOption(prevOption)) {
       return noScene;
     }
     // If the previously-active scene still exists in this group, remap its label (it may
@@ -627,7 +664,7 @@ class PhilipsHue {
       option = this.sceneIdToOption.get(sceneId)?.option ?? SCENE_NONE_OPTION;
     } else {
       // No active scene: reflect the group's power — `Off` when off, `—` placeholder when on.
-      option = this.groupPowerOn.get(groupId) === false ? SCENE_OFF_OPTION : SCENE_NONE_OPTION;
+      option = this.groupPowerOn.get(groupId) === false ? this.offLabel() : SCENE_NONE_OPTION;
     }
     const updates = {
       [SelectAttributes.CurrentOption]: option,
@@ -657,10 +694,10 @@ class PhilipsHue {
       | undefined;
     if (!on) {
       // Group turned off: show `Off`, clearing any active scene or placeholder.
-      if (current !== SCENE_OFF_OPTION) {
+      if (!current || !isOffOption(current)) {
         this.setSelectCurrentOption(groupId, undefined);
       }
-    } else if (current === SCENE_OFF_OPTION) {
+    } else if (current && isOffOption(current)) {
       // Group turned on with no scene yet: move `Off` back to the `—` placeholder.
       this.setSelectCurrentOption(groupId, undefined);
     }
@@ -727,7 +764,11 @@ class PhilipsHue {
       return StatusCodes.BadRequest;
     }
 
-    if (targetOption === SCENE_OFF_OPTION) {
+    // Matched against the "Off" label in any supported language, so it resolves even if the
+    // UI language changed between sending the options and this command arriving. Known
+    // limitation (same class as the `—` placeholder): a scene named literally "Off"/"Aus"/
+    // "Éteint" would be treated as the off sentinel rather than recalled.
+    if (isOffOption(targetOption)) {
       const groupConfig = this.config.getLight(groupId);
       if (!groupConfig || !this.isGroupConfig(groupConfig)) {
         log.warn("onSceneSelectCommand: no group config for %s; cannot turn off", groupId);
@@ -796,6 +837,9 @@ class PhilipsHue {
 
   private async handleConnect() {
     log.debug("Got connect event");
+    // Resolve the UI language before refreshing entities so scene Selects emit the localized
+    // "Off" label. updateLights() -> refreshSceneSelectStates() re-pushes every group's Select.
+    this.applyLanguage(this.resolveLanguage());
     // make sure the integration state is set
     await this.uc.setDeviceState(DeviceStates.Connected);
     this.updateLights().catch((error) => log.error("Updating lights failed:", error));

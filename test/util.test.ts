@@ -19,6 +19,8 @@ import {
   convertImageToBase64,
   i18all,
   isDeepEqual,
+  isOffOption,
+  OFF_LABEL_KEY,
   SCENE_NONE_OPTION
 } from "../src/util.js";
 import { SceneConfig } from "../src/config.js";
@@ -491,6 +493,32 @@ test("i18all returns translations", (t) => {
 
     const emptyResult = i18all("unknown");
     t.is(emptyResult.en, "unknown");
+  } finally {
+    i18n.__h = originalH;
+  }
+});
+
+// --- scene Select "Off" localization ---
+
+test("locale files define scenes.off for each supported language", (t) => {
+  const expected: Record<string, string> = { en: "Off", de: "Aus", fr: "Éteint" };
+  for (const [lang, value] of Object.entries(expected)) {
+    const json = JSON.parse(fs.readFileSync(`src/locales/${lang}.json`, "utf-8"));
+    t.is(json.scenes?.off, value, `${lang}.json scenes.off`);
+  }
+});
+
+test("isOffOption matches the Off label in any supported language", (t) => {
+  const originalH = i18n.__h;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  i18n.__h = (key: string): any => (key === OFF_LABEL_KEY ? [{ en: "Off" }, { de: "Aus" }, { fr: "Éteint" }] : []);
+
+  try {
+    t.true(isOffOption("Off"));
+    t.true(isOffOption("Aus"));
+    t.true(isOffOption("Éteint"));
+    t.false(isOffOption("Relax"));
+    t.false(isOffOption(SCENE_NONE_OPTION));
   } finally {
     i18n.__h = originalH;
   }

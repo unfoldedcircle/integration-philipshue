@@ -30,14 +30,16 @@ import Config, { GroupConfig, LightConfig, SceneConfig } from "./config.js";
 export const SCENE_NONE_OPTION = "—";
 
 /**
- * Option shown for turning a group off / reflecting that it is off.
+ * i18n key for the scene Select "Off" option.
  *
- * Unlike {@link SCENE_NONE_OPTION}, this option is always present in a group's scene
- * Select. It is the `current_option` whenever the group is off, and selecting it while the
- * group is on turns the entire group off. Like the placeholder, the caller (not
- * {@link buildSceneOptionsForGroup}) inserts it into the options list.
+ * Unlike {@link SCENE_NONE_OPTION} (a language-neutral em dash), the "Off" option is
+ * localized: it is always present in a group's scene Select, is the `current_option`
+ * whenever the group is off, and turns the entire group off when selected while on. The
+ * caller (not {@link buildSceneOptionsForGroup}) inserts the resolved label into the options
+ * list — use {@link localize} to render it in the active language and {@link isOffOption} to
+ * match an incoming/stored label against any supported language.
  */
-export const SCENE_OFF_OPTION = "Off";
+export const OFF_LABEL_KEY = "scenes.off";
 
 export function convertImageToBase64(file: string) {
   let data;
@@ -746,6 +748,33 @@ export function i18all(key: string): Record<string, string> {
     out.en = key;
   }
   return out;
+}
+
+/**
+ * Resolve a translation key to a single string in the given language.
+ *
+ * Single-language counterpart to {@link i18all}. Falls back to the configured default locale
+ * (English) and ultimately to the key itself if the phrase is missing.
+ *
+ * @param key translation key
+ * @param language target language code (e.g. "en", "de", "fr")
+ * @return the translated string for `language`
+ */
+export function localize(key: string, language: string): string {
+  return i18n.__({ phrase: key, locale: language });
+}
+
+/**
+ * Whether an option label is the "Off" scene-Select option in ANY supported language.
+ *
+ * Inbound select commands and previously-rendered labels are matched against every localized
+ * variant, so a language change between sending the options and receiving the command (or
+ * across a reconnect) still resolves correctly.
+ *
+ * @param option the option label to test
+ */
+export function isOffOption(option: string): boolean {
+  return Object.values(i18all(OFF_LABEL_KEY)).includes(option);
 }
 
 /**
