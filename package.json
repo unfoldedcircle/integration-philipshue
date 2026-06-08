@@ -25,7 +25,7 @@
   "devDependencies": {
     "@types/debug": "^4.1.12",
     "@types/i18n": "^0.13.12",
-    "@types/node": "^22.19.19",
+    "@types/node": "^22.19.20",
     "@types/qs": "^6.15.1",
     "ava": "^8.0.1",
     "eslint": "^9.39.4",
