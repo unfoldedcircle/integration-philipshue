@@ -31,5 +31,8 @@
       "not_configured": "Aucun hub configuré.",
       "lights": "Lumières disponibles"
     }
+  },
+  "scenes": {
+    "off": "Éteint"
   }
 }

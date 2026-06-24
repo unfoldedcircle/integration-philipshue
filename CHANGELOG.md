@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
-_Changes in the next release_
+### Added
+
+- Scene `Select` entities now include an `Off` option that reflects the group's power state and turns the whole group off when selected by @stakats ([#150](https://github.com/unfoldedcircle/integration-philipshue/pull/150)).
+
+### Fixed
+
+- A scene named like the `Off` or `—` option is no longer shadowed — such scenes stay selectable and recallable by @stakats ([#150](https://github.com/unfoldedcircle/integration-philipshue/pull/150)).
 
 ---
 
