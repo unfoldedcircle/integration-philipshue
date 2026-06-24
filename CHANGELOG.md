@@ -7,15 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+_Changes in the next release_
+
+---
+
+## v0.4.1 - 2026-06-24
+
 ### Added
 
 - Scene `Select` entities now include an `Off` option that reflects the group's power state and turns the whole group off when selected by @stakats ([#150](https://github.com/unfoldedcircle/integration-philipshue/pull/150)).
 
 ### Fixed
 
+- Setup fails on RemoteTwo because of a too long hostname used for the Hub authentication ([#149](https://github.com/unfoldedcircle/integration-philipshue/issues/149), [bug-tracker#787](https://github.com/unfoldedcircle/feature-and-bug-tracker/issues/787)).
 - A scene named like the `Off` or `—` option is no longer shadowed — such scenes stay selectable and recallable by @stakats ([#150](https://github.com/unfoldedcircle/integration-philipshue/pull/150)).
-
----
 
 ## v0.4.0 - 2026-06-04
 
