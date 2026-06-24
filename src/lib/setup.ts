@@ -35,6 +35,56 @@ import * as uc from "@unfoldedcircle/integration-api";
 import net from "net";
 
 /**
+ * Maximum length for the device name portion of the deviceType.
+ * Philips Hue API v2 limits deviceName to 19 characters.
+ */
+const MAX_DEVICE_NAME_LENGTH = 19;
+
+/**
+ * Creates a device type name for Philips Hue authentication.
+ *
+ * The Philips Hue API v2 has strict limits on the deviceType parameter:
+ * - applicationName: max 20 characters
+ * - deviceName: max 19 characters
+ * - Combined format: <application_name>#<device_name>
+ *
+ * This function automatically shortens the deviceName to fit within the limit.
+ * Shortening strategy (in order):
+ * 1. Remove domain suffixes from right to left (e.g., ".local", ".subdomain.local")
+ *    to preserve the hostname which is the most important information.
+ * 2. Replace "RemoteTwo" with "R2" and "RemoteThree" with "R3"
+ * 3. Truncate to maximum length if still too long
+ *
+ * @param applicationName - The application name (e.g., "unfoldedcircle")
+ * @param deviceName - The device name (e.g., hostname) to be shortened if needed
+ * @returns A device type string in the format "applicationName#deviceName"
+ */
+export function createDeviceTypeName(applicationName: string, deviceName: string): string {
+  let shortenedName = deviceName;
+
+  // Step 1: Remove domain suffixes from right to left (e.g., ".local", ".subdomain.local")
+  // This preserves the hostname which is the most important information
+  while (shortenedName.length > MAX_DEVICE_NAME_LENGTH && shortenedName.includes(".")) {
+    // Remove the last domain segment (everything from the last dot onwards)
+    const lastDotIndex = shortenedName.lastIndexOf(".");
+    shortenedName = shortenedName.substring(0, lastDotIndex);
+  }
+
+  // Step 2: Replace "RemoteTwo" with "R2" and "Remote3" with "R3" if still too long
+  if (shortenedName.length > MAX_DEVICE_NAME_LENGTH) {
+    shortenedName = shortenedName.replace(/RemoteTwo/g, "R2");
+    shortenedName = shortenedName.replace(/Remote3/g, "R3");
+  }
+
+  // Step 3: Finally, truncate to maximum length if still too long
+  if (shortenedName.length > MAX_DEVICE_NAME_LENGTH) {
+    shortenedName = shortenedName.substring(0, MAX_DEVICE_NAME_LENGTH);
+  }
+
+  return `${applicationName}#${shortenedName}`;
+}
+
+/**
  * Enumeration of setup steps to keep track of user data responses.
  */
 enum SetupSteps {
@@ -294,7 +344,8 @@ class PhilipsHueSetup {
     if (msg.confirm && this.selectedHub) {
       try {
         const api = this.hueApiFactory(getHubUrl(this.selectedHub.ip));
-        const authKey = await api.generateAuthKey("unfoldedcircle#" + os.hostname());
+        const deviceType = createDeviceTypeName("unfoldedcircle", os.hostname());
+        const authKey = await api.generateAuthKey(deviceType);
         api.setAuthKey(authKey.username);
         this.config.updateHubConfig({
           name: this.selectedHub.name,
