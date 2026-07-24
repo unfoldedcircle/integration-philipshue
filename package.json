@@ -17,7 +17,7 @@
   "dependencies": {
     "@unfoldedcircle/integration-api": "^0.5.0",
     "axios": "^1.18.0",
-    "bonjour-service": "^1.4.1",
+    "bonjour-service": "^1.4.2",
     "eventsource": "^4.1.0",
     "i18n": "^0.15.3",
     "undici": "^7.28.0"
