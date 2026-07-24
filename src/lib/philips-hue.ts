@@ -577,6 +577,7 @@ class PhilipsHue {
     if (available.contains(entityId)) {
       const configured = this.uc.getConfiguredEntities();
       const updates: Record<string, string | string[] | SelectStates> = {
+        [SelectAttributes.State]: SelectStates.On,
         [SelectAttributes.Options]: options,
         [SelectAttributes.CurrentOption]: currentOption
       };
@@ -665,6 +666,7 @@ class PhilipsHue {
       ? (this.findSceneOption(groupId, sceneId)?.label ?? this.noSceneLabel(groupId))
       : this.noSceneLabel(groupId);
     const updates = {
+      [SelectAttributes.State]: SelectStates.On,
       [SelectAttributes.CurrentOption]: option,
       [SelectAttributes.Options]: this.optionsForCurrent(groupId, option)
     };
