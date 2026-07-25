@@ -2,7 +2,7 @@ import test from "ava";
 import PhilipsHueSetup, { createDeviceTypeName } from "../src/lib/setup.js";
 import Config from "../src/config.js";
 import * as uc from "@unfoldedcircle/integration-api";
-import { Bonjour, Service } from "bonjour-service";
+import Bonjour, { Service } from "bonjour-service";
 import HueApi from "../src/lib/hue-api/api.js";
 import { HubConfig } from "../src/lib/hue-api/types.js";
 
@@ -15,13 +15,13 @@ test("handleHubDiscovery should use normalized bridge ID for mDNS hubs", async (
 
   // Mock Bonjour
   const mockBonjour = {
-    find: (_query: object, callback: (service: Service) => void) => {
+    find: (_query: object, callback: (service: InstanceType<typeof Service>) => void) => {
       // Simulate discovery of a hub
       callback({
         host: "Philips-Hue.local",
         name: "Philips Hue Bridge",
         addresses: ["192.168.1.10"]
-      } as unknown as Service);
+      } as unknown as InstanceType<typeof Service>);
     },
     destroy: () => {}
   };

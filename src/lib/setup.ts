@@ -16,7 +16,7 @@ import {
   UserConfirmationResponse,
   UserDataResponse
 } from "@unfoldedcircle/integration-api";
-import { Bonjour } from "bonjour-service";
+import Bonjour, { Service } from "bonjour-service";
 import Config from "../config.js";
 import log from "../log.js";
 import {
@@ -447,14 +447,14 @@ class PhilipsHueSetup {
       log.info("Starting mDNS discovery of Hue hubs on the network");
 
       const bonjour = this.bonjourFactory();
-      bonjour.find({ type: "hue" }, (service) => {
+      bonjour.find({ type: "hue" }, (service: InstanceType<typeof Service>) => {
         if (!service.addresses) {
           log.warn("Hue bridge discovery: no address found", service.host);
           return;
         }
 
         // Prefer IPv4
-        const sortedAddresses = service.addresses.slice().sort((a, b) => {
+        const sortedAddresses = service.addresses.slice().sort((a: string, b: string) => {
           return (net.isIPv4(b) ? 1 : 0) - (net.isIPv4(a) ? 1 : 0);
         });
 
