@@ -11,6 +11,16 @@ _Changes in the next release_
 
 ---
 
+## v0.4.2 - 2026-07-25
+
+### Fixed
+
+- State attributes of all scene select entities are unknown. Contributed by @henrikwidlund ([#170](https://github.com/unfoldedcircle/integration-philipshue/issues/170)).
+
+### Changed
+
+- Dependency updates.
+
 ## v0.4.1 - 2026-06-24
 
 ### Added
