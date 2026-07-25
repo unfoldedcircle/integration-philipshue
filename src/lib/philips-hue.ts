@@ -690,8 +690,7 @@ class PhilipsHue {
     }
     const entityId = this.getSceneSelectEntityId(groupId);
     const current = this.uc.getAvailableEntities().getEntity(entityId)?.attributes?.[SelectAttributes.CurrentOption] as
-      | string
-      | undefined;
+      string | undefined;
     const showingOff = current !== undefined && this.findOption(groupId, current)?.kind === "off";
     if (!on) {
       // Group turned off: show `Off`, clearing any active scene or placeholder.

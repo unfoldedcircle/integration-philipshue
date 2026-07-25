@@ -46,9 +46,7 @@ export const OFF_LABEL_KEY = "scenes.off";
  * separate id/value channel, so labels must be unique — see {@link buildSceneSelectOptions}).
  */
 export type SceneSelectOption =
-  | { kind: "off"; label: string }
-  | { kind: "none"; label: string }
-  | { kind: "scene"; label: string; sceneId: string };
+  { kind: "off"; label: string } | { kind: "none"; label: string } | { kind: "scene"; label: string; sceneId: string };
 
 export function convertImageToBase64(file: string) {
   let data;
